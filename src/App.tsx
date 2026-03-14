@@ -49,9 +49,13 @@ export default function App() {
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('Drinks');
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
-  const [adminSubView, setAdminSubView] = useState<'dashboard' | 'menu'>('dashboard');
+  const [adminSubView, setAdminSubView] = useState<'dashboard' | 'menu' | 'categories' | 'subcategories'>('dashboard');
   const [editingItem, setEditingItem] = useState<Partial<MenuItem> | null>(null);
+  const [editingCategory, setEditingCategory] = useState<Partial<Category> | null>(null);
+  const [editingSubcategory, setEditingSubcategory] = useState<Partial<Subcategory> | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [isSubcategoryModalOpen, setIsSubcategoryModalOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
@@ -128,6 +132,73 @@ export default function App() {
       setMenuLoading(false);
     }
   };
+
+  const autoPopulateMenu = async () => {
+    if (categories.length > 0 || menuLoading || authLoading) return;
+    
+    // Check if categories really don't exist in DB
+    const { count } = await supabase.from('categories').select('*', { count: 'exact', head: true });
+    if (count !== 0) return;
+
+    console.log('Auto-populating menu...');
+    setAuthLoading(true);
+    try {
+      const catNames = [...new Set(initialMenuData.map(item => item.category))];
+      
+      for (const catName of catNames) {
+        const { data: catData, error: catError } = await supabase
+          .from('categories')
+          .insert({ name: catName })
+          .select()
+          .single();
+        
+        if (catError) throw catError;
+
+        const subcats = [...new Set(initialMenuData
+          .filter(item => item.category === catName)
+          .map(item => item.subcategory))];
+
+        for (const subName of subcats) {
+          const { data: subData, error: subError } = await supabase
+            .from('subcategories')
+            .insert({ category_id: catData.id, name: subName })
+            .select()
+            .single();
+          
+          if (subError) throw subError;
+
+          const items = initialMenuData.filter(item => 
+            item.category === catName && item.subcategory === subName
+          );
+
+          const { error: itemError } = await supabase
+            .from('menu_items')
+            .insert(items.map(item => ({
+              subcategory_id: subData.id,
+              name: item.name,
+              price: item.price,
+              description: item.description || '',
+              image_url: item.image_url || '',
+              is_available: true
+            })));
+          
+          if (itemError) throw itemError;
+        }
+      }
+      fetchCategories();
+      fetchMenu();
+    } catch (error) {
+      console.error('Auto-populate error:', error);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!loading && categories.length === 0) {
+      autoPopulateMenu();
+    }
+  }, [loading, categories.length]);
 
   const fetchCategories = async () => {
     try {
@@ -216,67 +287,83 @@ export default function App() {
     await supabase.auth.signOut();
   };
 
-  const handleSyncMenu = async () => {
-    if (!confirm('This will clear your current menu and replace it with the official Lamonte menu hierarchy. Are you sure?')) return;
-    
+  const handleSaveCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCategory?.name) return;
+
     setAuthLoading(true);
     try {
-      // 1. Clear everything (cascading deletes will handle subcategories and items)
-      await supabase.from('categories').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-
-      // 2. Extract unique categories
-      const categories = [...new Set(initialMenuData.map(item => item.category))];
-      
-      for (const catName of categories) {
-        const { data: catData, error: catError } = await supabase
+      if (editingCategory.id) {
+        const { error } = await supabase
           .from('categories')
-          .insert({ name: catName })
-          .select()
-          .single();
-        
-        if (catError) throw catError;
-
-        // 3. Extract unique subcategories for this category
-        const subcats = [...new Set(initialMenuData
-          .filter(item => item.category === catName)
-          .map(item => item.subcategory))];
-
-        for (const subName of subcats) {
-          const { data: subData, error: subError } = await supabase
-            .from('subcategories')
-            .insert({ category_id: catData.id, name: subName })
-            .select()
-            .single();
-          
-          if (subError) throw subError;
-
-          // 4. Insert items for this subcategory
-          const items = initialMenuData.filter(item => 
-            item.category === catName && item.subcategory === subName
-          );
-
-          const { error: itemError } = await supabase
-            .from('menu_items')
-            .insert(items.map(item => ({
-              subcategory_id: subData.id,
-              name: item.name,
-              price: item.price,
-              description: item.description || '',
-              image_url: item.image_url || '',
-              is_available: true
-            })));
-          
-          if (itemError) throw itemError;
-        }
+          .update({ name: editingCategory.name })
+          .eq('id', editingCategory.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('categories')
+          .insert([{ name: editingCategory.name }]);
+        if (error) throw error;
       }
-
-      alert('Menu synchronized successfully!');
-      fetchMenu();
+      setIsCategoryModalOpen(false);
+      setEditingCategory(null);
+      fetchCategories();
     } catch (error: any) {
-      console.error('Sync error:', error);
-      alert('Failed to sync menu: ' + error.message);
+      alert(error.message);
     } finally {
       setAuthLoading(false);
+    }
+  };
+
+  const handleDeleteCategory = async (id: string) => {
+    if (!confirm('Are you sure? This will delete all subcategories and items in this category.')) return;
+    try {
+      const { error } = await supabase.from('categories').delete().eq('id', id);
+      if (error) throw error;
+      fetchCategories();
+      fetchMenu();
+    } catch (error: any) {
+      alert(error.message);
+    }
+  };
+
+  const handleSaveSubcategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSubcategory?.name || !editingSubcategory?.category_id) return;
+
+    setAuthLoading(true);
+    try {
+      if (editingSubcategory.id) {
+        const { error } = await supabase
+          .from('subcategories')
+          .update({ name: editingSubcategory.name, category_id: editingSubcategory.category_id })
+          .eq('id', editingSubcategory.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('subcategories')
+          .insert([{ name: editingSubcategory.name, category_id: editingSubcategory.category_id }]);
+        if (error) throw error;
+      }
+      setIsSubcategoryModalOpen(false);
+      setEditingSubcategory(null);
+      fetchCategories();
+    } catch (error: any) {
+      alert(error.message);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleDeleteSubcategory = async (id: string) => {
+    if (!confirm('Are you sure? This will delete all items in this subcategory.')) return;
+    try {
+      const { error } = await supabase.from('subcategories').delete().eq('id', id);
+      if (error) throw error;
+      fetchCategories();
+      fetchMenu();
+    } catch (error: any) {
+      alert(error.message);
     }
   };
 
@@ -343,7 +430,7 @@ export default function App() {
     setIsGenerating(true);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const prompt = `Professional food photography of ${editingItem.name}. ${editingItem.description || ''}. High-end restaurant style, minimalist background, warm lighting, 4k resolution.`;
+      const prompt = `Professional food photography of ${editingItem.name}. ${editingItem.description || ''}. High-end restaurant style, minimalist background, warm lighting, 4k resolution. Please include a small, elegant, and subtle "Lamonte" restaurant logo in one of the corners of the image.`;
       
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash-image',
@@ -564,16 +651,18 @@ export default function App() {
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                     {[
                       { title: "Manage Menu", desc: "Add, edit, or remove menu items.", icon: "🍔", view: 'menu' },
+                      { title: "Categories", desc: "Manage top-level menu sections.", icon: "📂", view: 'categories' },
+                      { title: "Subcategories", desc: "Manage nested menu groups.", icon: "📁", view: 'subcategories' },
                       { title: "Reservations", desc: "View and manage table bookings.", icon: "📅", view: 'dashboard' },
                       { title: "Analytics", desc: "Track your restaurant's performance.", icon: "📈", view: 'dashboard' }
                     ].map((item, i) => (
                       <motion.div
                         key={i}
                         whileHover={{ y: -5 }}
-                        onClick={() => item.view === 'menu' && setAdminSubView('menu')}
+                        onClick={() => item.view !== 'dashboard' && setAdminSubView(item.view as any)}
                         className="bg-white p-8 rounded-[32px] border border-[#e5e5e0] shadow-sm hover:shadow-md transition-all cursor-pointer"
                       >
                         <div className="text-4xl mb-4">{item.icon}</div>
@@ -583,6 +672,130 @@ export default function App() {
                     ))}
                   </div>
                 </>
+              ) : adminSubView === 'categories' ? (
+                <div className="space-y-8">
+                  <div className="flex items-center justify-between">
+                    <button 
+                      onClick={() => setAdminSubView('dashboard')}
+                      className="flex items-center gap-2 text-gray-400 hover:text-[#A65E3E] transition-colors"
+                    >
+                      <ArrowLeft className="w-5 h-5" />
+                      Back to Dashboard
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingCategory({ name: '' });
+                        setIsCategoryModalOpen(true);
+                      }}
+                      className="flex items-center gap-2 px-6 py-3 bg-[#A65E3E] text-white rounded-2xl font-bold hover:bg-[#8d4f34] transition-all shadow-lg shadow-[#A65E3E]/20"
+                    >
+                      <Plus className="w-5 h-5" />
+                      Add Category
+                    </button>
+                  </div>
+
+                  <div className="bg-white rounded-[32px] border border-[#e5e5e0] overflow-hidden">
+                    <table className="w-full text-left">
+                      <thead className="bg-[#f9f9f7] border-b border-[#e5e5e0]">
+                        <tr>
+                          <th className="px-6 py-4 text-xs uppercase tracking-widest font-bold text-gray-400">Category Name</th>
+                          <th className="px-6 py-4 text-xs uppercase tracking-widest font-bold text-gray-400 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#e5e5e0]">
+                        {categories.map((cat) => (
+                          <tr key={cat.id} className="hover:bg-[#f9f9f7] transition-colors">
+                            <td className="px-6 py-4 font-bold text-[#1a1a1a]">{cat.name}</td>
+                            <td className="px-6 py-4 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => {
+                                    setEditingCategory(cat);
+                                    setIsCategoryModalOpen(true);
+                                  }}
+                                  className="p-2 text-gray-400 hover:text-[#A65E3E] transition-colors"
+                                >
+                                  <Edit2 className="w-5 h-5" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteCategory(cat.id)}
+                                  className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                                >
+                                  <Trash2 className="w-5 h-5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : adminSubView === 'subcategories' ? (
+                <div className="space-y-8">
+                  <div className="flex items-center justify-between">
+                    <button 
+                      onClick={() => setAdminSubView('dashboard')}
+                      className="flex items-center gap-2 text-gray-400 hover:text-[#A65E3E] transition-colors"
+                    >
+                      <ArrowLeft className="w-5 h-5" />
+                      Back to Dashboard
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingSubcategory({ name: '', category_id: categories[0]?.id });
+                        setIsSubcategoryModalOpen(true);
+                      }}
+                      className="flex items-center gap-2 px-6 py-3 bg-[#A65E3E] text-white rounded-2xl font-bold hover:bg-[#8d4f34] transition-all shadow-lg shadow-[#A65E3E]/20"
+                    >
+                      <Plus className="w-5 h-5" />
+                      Add Subcategory
+                    </button>
+                  </div>
+
+                  <div className="bg-white rounded-[32px] border border-[#e5e5e0] overflow-hidden">
+                    <table className="w-full text-left">
+                      <thead className="bg-[#f9f9f7] border-b border-[#e5e5e0]">
+                        <tr>
+                          <th className="px-6 py-4 text-xs uppercase tracking-widest font-bold text-gray-400">Subcategory Name</th>
+                          <th className="px-6 py-4 text-xs uppercase tracking-widest font-bold text-gray-400">Parent Category</th>
+                          <th className="px-6 py-4 text-xs uppercase tracking-widest font-bold text-gray-400 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#e5e5e0]">
+                        {subcategories.map((sub) => (
+                          <tr key={sub.id} className="hover:bg-[#f9f9f7] transition-colors">
+                            <td className="px-6 py-4 font-bold text-[#1a1a1a]">{sub.name}</td>
+                            <td className="px-6 py-4">
+                              <span className="text-xs font-bold uppercase tracking-tighter text-[#A65E3E] bg-[#A65E3E]/10 px-2 py-1 rounded-md">
+                                {categories.find(c => c.id === sub.category_id)?.name}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => {
+                                    setEditingSubcategory(sub);
+                                    setIsSubcategoryModalOpen(true);
+                                  }}
+                                  className="p-2 text-gray-400 hover:text-[#A65E3E] transition-colors"
+                                >
+                                  <Edit2 className="w-5 h-5" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteSubcategory(sub.id)}
+                                  className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                                >
+                                  <Trash2 className="w-5 h-5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               ) : (
                 <div className="space-y-8">
                   <div className="flex items-center justify-between">
@@ -594,14 +807,6 @@ export default function App() {
                       Back to Dashboard
                     </button>
                     <div className="flex items-center gap-4">
-                      <button
-                        onClick={handleSyncMenu}
-                        disabled={authLoading}
-                        className="flex items-center gap-2 px-6 py-3 bg-white border border-[#e5e5e0] text-[#A65E3E] rounded-2xl font-bold hover:bg-[#f9f9f7] transition-all disabled:opacity-50"
-                      >
-                        <RefreshCw className={`w-5 h-5 ${authLoading ? 'animate-spin' : ''}`} />
-                        Sync Official Menu
-                      </button>
                       <button
                         onClick={() => {
                           setEditingItem({ name: '', description: '', price: 0, category: '', subcategory: '', subcategory_id: '', image_url: '' });
@@ -681,6 +886,145 @@ export default function App() {
                 </div>
               )}
             </main>
+
+            {/* Category Modal */}
+            <AnimatePresence>
+              {isCategoryModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={() => setIsCategoryModalOpen(false)}
+                    className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                  />
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                    className="relative w-full max-w-md bg-white rounded-[40px] shadow-2xl overflow-hidden"
+                  >
+                    <div className="p-8 border-b border-[#e5e5e0] flex items-center justify-between">
+                      <h2 className="text-3xl font-bold text-[#A65E3E]">
+                        {editingCategory?.id ? 'Edit Category' : 'New Category'}
+                      </h2>
+                      <button onClick={() => setIsCategoryModalOpen(false)} className="p-2 text-gray-400 hover:text-[#1a1a1a]">
+                        <X className="w-6 h-6" />
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleSaveCategory} className="p-8 space-y-6">
+                      <div className="space-y-2">
+                        <label className="text-xs uppercase tracking-widest font-bold text-gray-400 ml-1">Category Name</label>
+                        <input
+                          type="text"
+                          required
+                          value={editingCategory?.name || ''}
+                          onChange={(e) => setEditingCategory(prev => ({ ...prev, name: e.target.value }))}
+                          className="w-full px-4 py-3 bg-[#f9f9f7] border border-[#e5e5e0] rounded-2xl focus:ring-2 focus:ring-[#A65E3E]/20 focus:border-[#A65E3E] outline-none transition-all"
+                          placeholder="e.g. Drinks, Food, etc."
+                        />
+                      </div>
+
+                      <div className="pt-4 flex gap-4">
+                        <button
+                          type="button"
+                          onClick={() => setIsCategoryModalOpen(false)}
+                          className="flex-1 py-4 bg-[#f9f9f7] text-gray-500 rounded-2xl font-bold hover:bg-[#f0f0ed] transition-all"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={authLoading}
+                          className="flex-1 py-4 bg-[#A65E3E] text-white rounded-2xl font-bold hover:bg-[#8d4f34] transition-all shadow-lg shadow-[#A65E3E]/20 flex items-center justify-center gap-2 disabled:opacity-70"
+                        >
+                          {authLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                          Save Category
+                        </button>
+                      </div>
+                    </form>
+                  </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
+
+            {/* Subcategory Modal */}
+            <AnimatePresence>
+              {isSubcategoryModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={() => setIsSubcategoryModalOpen(false)}
+                    className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                  />
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                    className="relative w-full max-w-md bg-white rounded-[40px] shadow-2xl overflow-hidden"
+                  >
+                    <div className="p-8 border-b border-[#e5e5e0] flex items-center justify-between">
+                      <h2 className="text-3xl font-bold text-[#A65E3E]">
+                        {editingSubcategory?.id ? 'Edit Subcategory' : 'New Subcategory'}
+                      </h2>
+                      <button onClick={() => setIsSubcategoryModalOpen(false)} className="p-2 text-gray-400 hover:text-[#1a1a1a]">
+                        <X className="w-6 h-6" />
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleSaveSubcategory} className="p-8 space-y-6">
+                      <div className="space-y-2">
+                        <label className="text-xs uppercase tracking-widest font-bold text-gray-400 ml-1">Parent Category</label>
+                        <select
+                          required
+                          value={editingSubcategory?.category_id || ''}
+                          onChange={(e) => setEditingSubcategory(prev => ({ ...prev, category_id: e.target.value }))}
+                          className="w-full px-4 py-3 bg-[#f9f9f7] border border-[#e5e5e0] rounded-2xl focus:ring-2 focus:ring-[#A65E3E]/20 focus:border-[#A65E3E] outline-none transition-all"
+                        >
+                          <option value="" disabled>Select Category</option>
+                          {categories.map(cat => (
+                            <option key={cat.id} value={cat.id}>{cat.name}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs uppercase tracking-widest font-bold text-gray-400 ml-1">Subcategory Name</label>
+                        <input
+                          type="text"
+                          required
+                          value={editingSubcategory?.name || ''}
+                          onChange={(e) => setEditingSubcategory(prev => ({ ...prev, name: e.target.value }))}
+                          className="w-full px-4 py-3 bg-[#f9f9f7] border border-[#e5e5e0] rounded-2xl focus:ring-2 focus:ring-[#A65E3E]/20 focus:border-[#A65E3E] outline-none transition-all"
+                          placeholder="e.g. Hot Drinks, Pasta, etc."
+                        />
+                      </div>
+
+                      <div className="pt-4 flex gap-4">
+                        <button
+                          type="button"
+                          onClick={() => setIsSubcategoryModalOpen(false)}
+                          className="flex-1 py-4 bg-[#f9f9f7] text-gray-500 rounded-2xl font-bold hover:bg-[#f0f0ed] transition-all"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={authLoading}
+                          className="flex-1 py-4 bg-[#A65E3E] text-white rounded-2xl font-bold hover:bg-[#8d4f34] transition-all shadow-lg shadow-[#A65E3E]/20 flex items-center justify-center gap-2 disabled:opacity-70"
+                        >
+                          {authLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                          Save Subcategory
+                        </button>
+                      </div>
+                    </form>
+                  </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
 
             {/* Edit Modal */}
             <AnimatePresence>

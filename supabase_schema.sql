@@ -9,18 +9,30 @@ CREATE TABLE public.profiles (
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
+-- Helper function to check if user is admin
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.profiles 
+    WHERE id = auth.uid() AND role = 'admin'
+  ) OR (
+    auth.jwt() ->> 'email' = 'odisho.odeesh@gmail.com'
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 CREATE POLICY "Public profiles are viewable by everyone" 
   ON public.profiles FOR SELECT USING (true);
 
 CREATE POLICY "Users can update own or admins can update all" 
   ON public.profiles FOR UPDATE 
-  USING (
-    auth.uid() = id OR 
-    EXISTS (
-      SELECT 1 FROM public.profiles 
-      WHERE id = auth.uid() AND role = 'admin'
-    )
-  );
+  USING (auth.uid() = id OR public.is_admin())
+  WITH CHECK (auth.uid() = id OR public.is_admin());
+
+CREATE POLICY "Admins can insert profiles"
+  ON public.profiles FOR INSERT
+  WITH CHECK (public.is_admin());
 
 
 -- 2. CATEGORIES TABLE
@@ -36,14 +48,10 @@ ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Categories are viewable by everyone" 
   ON public.categories FOR SELECT USING (true);
 
-CREATE POLICY "Only admins can manage categories" 
+CREATE POLICY "Admins can manage categories" 
   ON public.categories FOR ALL 
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.profiles 
-      WHERE id = auth.uid() AND role = 'admin'
-    )
-  );
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
 
 
 -- 3. SUBCATEGORIES TABLE
@@ -61,14 +69,10 @@ ALTER TABLE public.subcategories ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Subcategories are viewable by everyone" 
   ON public.subcategories FOR SELECT USING (true);
 
-CREATE POLICY "Only admins can manage subcategories" 
+CREATE POLICY "Admins can manage subcategories" 
   ON public.subcategories FOR ALL 
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.profiles 
-      WHERE id = auth.uid() AND role = 'admin'
-    )
-  );
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
 
 
 -- 4. MENU ITEMS TABLE
@@ -89,14 +93,10 @@ ALTER TABLE public.menu_items ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Menu items are viewable by everyone" 
   ON public.menu_items FOR SELECT USING (true);
 
-CREATE POLICY "Only admins can manage menu items" 
+CREATE POLICY "Admins can manage menu items" 
   ON public.menu_items FOR ALL 
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.profiles 
-      WHERE id = auth.uid() AND role = 'admin'
-    )
-  );
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
 
 
 -- 5. RESERVATIONS TABLE
@@ -115,26 +115,15 @@ ALTER TABLE public.reservations ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can view own or admins can view all" 
   ON public.reservations FOR SELECT 
-  USING (
-    auth.uid() = user_id OR 
-    EXISTS (
-      SELECT 1 FROM public.profiles 
-      WHERE id = auth.uid() AND role = 'admin'
-    )
-  );
+  USING (auth.uid() = user_id OR public.is_admin());
 
 CREATE POLICY "Users can create their own reservations" 
   ON public.reservations FOR INSERT WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "Users can update own or admins can update all" 
   ON public.reservations FOR UPDATE 
-  USING (
-    auth.uid() = user_id OR 
-    EXISTS (
-      SELECT 1 FROM public.profiles 
-      WHERE id = auth.uid() AND role = 'admin'
-    )
-  );
+  USING (auth.uid() = user_id OR public.is_admin())
+  WITH CHECK (auth.uid() = user_id OR public.is_admin());
 
 
 -- 6. AUTOMATIC PROFILE CREATION
@@ -150,7 +139,12 @@ BEGIN
       WHEN new.email = 'odisho.odeesh@gmail.com' THEN 'admin'
       ELSE 'user'
     END
-  );
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    full_name = EXCLUDED.full_name,
+    avatar_url = EXCLUDED.avatar_url,
+    role = EXCLUDED.role,
+    updated_at = NOW();
   RETURN new;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
