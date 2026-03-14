@@ -17,7 +17,20 @@ interface MenuItem {
   price: number;
   category: string;
   subcategory: string;
+  subcategory_id?: string;
   image_url: string;
+}
+
+interface Category {
+  id: string;
+  name: string;
+  subcategories: Subcategory[];
+}
+
+interface Subcategory {
+  id: string;
+  category_id: string;
+  name: string;
 }
 
 export default function App() {
@@ -32,6 +45,8 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(false);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [menuLoading, setMenuLoading] = useState(true);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('Drinks');
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [adminSubView, setAdminSubView] = useState<'dashboard' | 'menu'>('dashboard');
@@ -70,6 +85,7 @@ export default function App() {
     });
 
     fetchMenu();
+    if (session) fetchCategories();
 
     return () => {
       clearTimeout(timer);
@@ -82,20 +98,55 @@ export default function App() {
     try {
       const { data, error } = await supabase
         .from('menu_items')
-        .select('*')
+        .select(`
+          *,
+          subcategories (
+            id,
+            name,
+            categories (
+              id,
+              name
+            )
+          )
+        `)
         .eq('is_available', true)
-        .order('category', { ascending: true })
-        .order('subcategory', { ascending: true })
         .order('name', { ascending: true });
 
       if (data) {
-        setMenuItems(data);
+        const flattenedData = data.map((item: any) => ({
+          ...item,
+          category: item.subcategories?.categories?.name || 'Uncategorized',
+          subcategory: item.subcategories?.name || 'General',
+          subcategory_id: item.subcategory_id
+        }));
+        setMenuItems(flattenedData);
       }
       if (error) throw error;
     } catch (error) {
       console.error('Error fetching menu:', error);
     } finally {
       setMenuLoading(false);
+    }
+  };
+
+  const fetchCategories = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('categories')
+        .select(`
+          *,
+          subcategories (*)
+        `)
+        .order('display_order', { ascending: true });
+      
+      if (data) {
+        setCategories(data);
+        const allSubcats = data.flatMap((c: any) => c.subcategories);
+        setSubcategories(allSubcats);
+      }
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error fetching categories:', error);
     }
   };
 
@@ -166,29 +217,58 @@ export default function App() {
   };
 
   const handleSyncMenu = async () => {
-    if (!confirm('This will clear your current menu and replace it with the official Lamonte menu. Are you sure?')) return;
+    if (!confirm('This will clear your current menu and replace it with the official Lamonte menu hierarchy. Are you sure?')) return;
     
     setAuthLoading(true);
     try {
-      // Clear existing items
-      const { error: deleteError } = await supabase
-        .from('menu_items')
-        .delete()
-        .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+      // 1. Clear everything (cascading deletes will handle subcategories and items)
+      await supabase.from('categories').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+
+      // 2. Extract unique categories
+      const categories = [...new Set(initialMenuData.map(item => item.category))];
       
-      if (deleteError) throw deleteError;
+      for (const catName of categories) {
+        const { data: catData, error: catError } = await supabase
+          .from('categories')
+          .insert({ name: catName })
+          .select()
+          .single();
+        
+        if (catError) throw catError;
 
-      // Insert new items
-      const { error: insertError } = await supabase
-        .from('menu_items')
-        .insert(initialMenuData.map(item => ({
-          ...item,
-          description: item.description || '',
-          image_url: item.image_url || '',
-          is_available: true
-        })));
+        // 3. Extract unique subcategories for this category
+        const subcats = [...new Set(initialMenuData
+          .filter(item => item.category === catName)
+          .map(item => item.subcategory))];
 
-      if (insertError) throw insertError;
+        for (const subName of subcats) {
+          const { data: subData, error: subError } = await supabase
+            .from('subcategories')
+            .insert({ category_id: catData.id, name: subName })
+            .select()
+            .single();
+          
+          if (subError) throw subError;
+
+          // 4. Insert items for this subcategory
+          const items = initialMenuData.filter(item => 
+            item.category === catName && item.subcategory === subName
+          );
+
+          const { error: itemError } = await supabase
+            .from('menu_items')
+            .insert(items.map(item => ({
+              subcategory_id: subData.id,
+              name: item.name,
+              price: item.price,
+              description: item.description || '',
+              image_url: item.image_url || '',
+              is_available: true
+            })));
+          
+          if (itemError) throw itemError;
+        }
+      }
 
       alert('Menu synchronized successfully!');
       fetchMenu();
@@ -202,20 +282,32 @@ export default function App() {
 
   const handleSaveItem = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingItem) return;
+    if (!editingItem || !editingItem.subcategory_id) {
+      alert('Please select a subcategory');
+      return;
+    }
 
     setAuthLoading(true);
     try {
+      const itemToSave = {
+        name: editingItem.name,
+        description: editingItem.description || '',
+        price: editingItem.price,
+        image_url: editingItem.image_url || '',
+        subcategory_id: editingItem.subcategory_id,
+        is_available: true
+      };
+
       if (editingItem.id) {
         const { error } = await supabase
           .from('menu_items')
-          .update(editingItem)
+          .update(itemToSave)
           .eq('id', editingItem.id);
         if (error) throw error;
       } else {
         const { error } = await supabase
           .from('menu_items')
-          .insert([editingItem]);
+          .insert([itemToSave]);
         if (error) throw error;
       }
       setIsModalOpen(false);
@@ -512,7 +604,7 @@ export default function App() {
                       </button>
                       <button
                         onClick={() => {
-                          setEditingItem({ name: '', description: '', price: 0, category: 'Drinks', subcategory: 'Coffee', image_url: '' });
+                          setEditingItem({ name: '', description: '', price: 0, category: '', subcategory: '', subcategory_id: '', image_url: '' });
                           setIsModalOpen(true);
                         }}
                         className="flex items-center gap-2 px-6 py-3 bg-[#A65E3E] text-white rounded-2xl font-bold hover:bg-[#8d4f34] transition-all shadow-lg shadow-[#A65E3E]/20"
@@ -646,25 +738,49 @@ export default function App() {
                         <div className="space-y-2">
                           <label className="text-xs uppercase tracking-widest font-bold text-gray-400 ml-1">Category</label>
                           <select
-                            value={editingItem?.category || 'Drinks'}
-                            onChange={(e) => setEditingItem(prev => ({ ...prev, category: e.target.value }))}
+                            value={categories.find(c => c.name === editingItem?.category)?.id || ''}
+                            onChange={(e) => {
+                              const catId = e.target.value;
+                              const cat = categories.find(c => c.id === catId);
+                              const firstSub = cat?.subcategories[0];
+                              setEditingItem(prev => ({ 
+                                ...prev, 
+                                category: cat?.name || '', 
+                                subcategory: firstSub?.name || '',
+                                subcategory_id: firstSub?.id || ''
+                              }));
+                            }}
                             className="w-full px-4 py-3 bg-[#f9f9f7] border border-[#e5e5e0] rounded-2xl focus:ring-2 focus:ring-[#A65E3E]/20 focus:border-[#A65E3E] outline-none transition-all"
                           >
-                            <option value="Drinks">Drinks</option>
-                            <option value="SHISHA">SHISHA</option>
-                            <option value="FOOD">FOOD</option>
+                            <option value="" disabled>Select Category</option>
+                            {categories.map(cat => (
+                              <option key={cat.id} value={cat.id}>{cat.name}</option>
+                            ))}
                           </select>
                         </div>
                         <div className="space-y-2">
                           <label className="text-xs uppercase tracking-widest font-bold text-gray-400 ml-1">Subcategory</label>
-                          <input
-                            type="text"
-                            required
-                            value={editingItem?.subcategory || ''}
-                            onChange={(e) => setEditingItem(prev => ({ ...prev, subcategory: e.target.value }))}
+                          <select
+                            value={editingItem?.subcategory_id || ''}
+                            onChange={(e) => {
+                              const subId = e.target.value;
+                              const sub = subcategories.find(s => s.id === subId);
+                              setEditingItem(prev => ({ 
+                                ...prev, 
+                                subcategory: sub?.name || '',
+                                subcategory_id: subId 
+                              }));
+                            }}
                             className="w-full px-4 py-3 bg-[#f9f9f7] border border-[#e5e5e0] rounded-2xl focus:ring-2 focus:ring-[#A65E3E]/20 focus:border-[#A65E3E] outline-none transition-all"
-                            placeholder="e.g. Coffee, Pasta, etc."
-                          />
+                          >
+                            <option value="" disabled>Select Subcategory</option>
+                            {subcategories
+                              .filter(sub => sub.category_id === categories.find(c => c.name === editingItem?.category)?.id)
+                              .map(sub => (
+                                <option key={sub.id} value={sub.id}>{sub.name}</option>
+                              ))
+                            }
+                          </select>
                         </div>
                       </div>
 
