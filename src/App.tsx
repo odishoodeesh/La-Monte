@@ -6,17 +6,49 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { supabase } from "./lib/supabase";
-import { LogIn, UserPlus, LogOut, Mail, Lock, Loader2, User } from "lucide-react";
+import { LogIn, UserPlus, LogOut, Mail, Lock, Loader2, User, ChevronRight, ChevronDown, Plus, Edit2, Trash2, Image as ImageIcon, Sparkles, X, Save, ArrowLeft, RefreshCw } from "lucide-react";
+import { GoogleGenAI } from "@google/genai";
+import { initialMenuData } from "./data/menuData";
+
+interface MenuItem {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  category: string;
+  subcategory: string;
+  image_url: string;
+}
 
 export default function App() {
   const [showIntro, setShowIntro] = useState(true);
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [view, setView] = useState<'menu' | 'auth' | 'admin'>('menu');
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [menuLoading, setMenuLoading] = useState(true);
+  const [selectedCategory, setSelectedCategory] = useState<string>('Drinks');
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+  const [adminSubView, setAdminSubView] = useState<'dashboard' | 'menu'>('dashboard');
+  const [editingItem, setEditingItem] = useState<Partial<MenuItem> | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  useEffect(() => {
+    // Expand all categories by default when menuItems are loaded
+    if (menuItems.length > 0) {
+      const initialExpanded: Record<string, boolean> = {};
+      menuItems.forEach(item => {
+        initialExpanded[`${item.category}-${item.subcategory}`] = true;
+      });
+      setExpandedCategories(initialExpanded);
+    }
+  }, [menuItems]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -25,6 +57,7 @@ export default function App() {
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
+      if (session) setView('admin');
       setLoading(false);
     });
 
@@ -32,13 +65,63 @@ export default function App() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+      if (session) setView('admin');
+      else if (view === 'admin') setView('menu');
     });
+
+    fetchMenu();
 
     return () => {
       clearTimeout(timer);
       subscription.unsubscribe();
     };
   }, []);
+
+  const fetchMenu = async () => {
+    setMenuLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('menu_items')
+        .select('*')
+        .eq('is_available', true)
+        .order('category', { ascending: true })
+        .order('subcategory', { ascending: true })
+        .order('name', { ascending: true });
+
+      if (data) {
+        setMenuItems(data);
+      }
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error fetching menu:', error);
+    } finally {
+      setMenuLoading(false);
+    }
+  };
+
+  const toggleCategory = (cat: string) => {
+    setExpandedCategories(prev => ({ ...prev, [cat]: !prev[cat] }));
+  };
+
+  const groupedMenu = menuItems.reduce((acc, item) => {
+    const category = item.category || 'Uncategorized';
+    const subcategory = item.subcategory || 'General';
+    if (!acc[category]) acc[category] = {};
+    if (!acc[category][subcategory]) acc[category][subcategory] = [];
+    acc[category][subcategory].push(item);
+    return acc;
+  }, {} as Record<string, Record<string, MenuItem[]>>);
+
+  const mainCategories = ['Drinks', 'SHISHA', 'FOOD'];
+  
+  // Get all categories from data to ensure we don't miss any
+  const allCategories = Object.keys(groupedMenu);
+  
+  // Categories to display in order: main categories first, then any others
+  const displayCategories = [
+    ...mainCategories.filter(cat => allCategories.some(k => k.toLowerCase() === cat.toLowerCase())),
+    ...allCategories.filter(cat => !mainCategories.some(m => m.toLowerCase() === cat.toLowerCase()))
+  ];
 
   const handleGoogleSignIn = async () => {
     setAuthLoading(true);
@@ -82,6 +165,112 @@ export default function App() {
     await supabase.auth.signOut();
   };
 
+  const handleSyncMenu = async () => {
+    if (!confirm('This will clear your current menu and replace it with the official Lamonte menu. Are you sure?')) return;
+    
+    setAuthLoading(true);
+    try {
+      // Clear existing items
+      const { error: deleteError } = await supabase
+        .from('menu_items')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+      
+      if (deleteError) throw deleteError;
+
+      // Insert new items
+      const { error: insertError } = await supabase
+        .from('menu_items')
+        .insert(initialMenuData.map(item => ({
+          ...item,
+          description: item.description || '',
+          image_url: item.image_url || '',
+          is_available: true
+        })));
+
+      if (insertError) throw insertError;
+
+      alert('Menu synchronized successfully!');
+      fetchMenu();
+    } catch (error: any) {
+      console.error('Sync error:', error);
+      alert('Failed to sync menu: ' + error.message);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleSaveItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingItem) return;
+
+    setAuthLoading(true);
+    try {
+      if (editingItem.id) {
+        const { error } = await supabase
+          .from('menu_items')
+          .update(editingItem)
+          .eq('id', editingItem.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('menu_items')
+          .insert([editingItem]);
+        if (error) throw error;
+      }
+      setIsModalOpen(false);
+      setEditingItem(null);
+      fetchMenu();
+    } catch (error: any) {
+      alert(error.message);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleDeleteItem = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this item?')) return;
+    try {
+      const { error } = await supabase
+        .from('menu_items')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      fetchMenu();
+    } catch (error: any) {
+      alert(error.message);
+    }
+  };
+
+  const generateImage = async () => {
+    if (!editingItem?.name) {
+      alert('Please enter an item name first');
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const prompt = `Professional food photography of ${editingItem.name}. ${editingItem.description || ''}. High-end restaurant style, minimalist background, warm lighting, 4k resolution.`;
+      
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-image',
+        contents: [{ parts: [{ text: prompt }] }],
+      });
+
+      const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+      if (imagePart?.inlineData) {
+        const imageUrl = `data:image/png;base64,${imagePart.inlineData.data}`;
+        setEditingItem(prev => ({ ...prev, image_url: imageUrl }));
+      }
+    } catch (error: any) {
+      console.error('Generation error:', error);
+      alert('Failed to generate image. Please try again.');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   if (showIntro) {
     return (
       <div className="min-h-screen bg-[#f5f5f0] flex items-center justify-center overflow-hidden">
@@ -107,7 +296,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#f5f5f0] text-[#1a1a1a] font-serif">
       <AnimatePresence mode="wait">
-        {!session ? (
+        {view === 'auth' ? (
           <motion.div
             key="auth"
             initial={{ opacity: 0, y: 20 }}
@@ -116,6 +305,13 @@ export default function App() {
             className="min-h-screen flex items-center justify-center p-4"
           >
             <div className="w-full max-w-md bg-white rounded-[32px] shadow-xl p-8 border border-[#e5e5e0]">
+              <button 
+                onClick={() => setView('menu')}
+                className="mb-6 text-sm text-gray-400 hover:text-[#A65E3E] flex items-center gap-1 transition-colors"
+              >
+                <ChevronRight className="rotate-180 w-4 h-4" />
+                Back to Menu
+              </button>
               <div className="text-center mb-8">
                 <img
                   src="https://i.ibb.co/84TCyPNf/logo.png"
@@ -124,10 +320,10 @@ export default function App() {
                   referrerPolicy="no-referrer"
                 />
                 <h2 className="text-3xl font-bold text-[#A65E3E]">
-                  {authMode === 'signin' ? 'Welcome Back' : 'Join Lamonte'}
+                  Admin Access
                 </h2>
                 <p className="text-sm text-gray-500 mt-2">
-                  {authMode === 'signin' ? 'Sign in to your account' : 'Create a new account'}
+                  Sign in to manage Lamonte
                 </p>
               </div>
 
@@ -144,7 +340,7 @@ export default function App() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       className="w-full pl-12 pr-4 py-4 bg-[#f9f9f7] border border-[#e5e5e0] rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#A65E3E]/20 focus:border-[#A65E3E] transition-all"
-                      placeholder="name@example.com"
+                      placeholder="admin@lamonte.com"
                     />
                   </div>
                 </div>
@@ -179,15 +375,10 @@ export default function App() {
                 >
                   {authLoading ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : authMode === 'signin' ? (
+                  ) : (
                     <>
                       <LogIn className="w-5 h-5" />
                       Sign In
-                    </>
-                  ) : (
-                    <>
-                      <UserPlus className="w-5 h-5" />
-                      Sign Up
                     </>
                   )}
                 </button>
@@ -227,34 +418,34 @@ export default function App() {
                 </svg>
                 Google
               </button>
-
-              <div className="mt-8 text-center">
-                <button
-                  onClick={() => setAuthMode(authMode === 'signin' ? 'signup' : 'signin')}
-                  className="text-sm text-gray-500 hover:text-[#A65E3E] transition-colors"
-                >
-                  {authMode === 'signin' 
-                    ? "Don't have an account? Sign up" 
-                    : "Already have an account? Sign in"}
-                </button>
-              </div>
             </div>
           </motion.div>
-        ) : (
+        ) : view === 'admin' && session ? (
           <motion.div
-            key="dashboard"
+            key="admin"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             className="min-h-screen flex flex-col"
           >
             <nav className="bg-white border-b border-[#e5e5e0] px-6 py-4 flex items-center justify-between">
-              <img
-                src="https://i.ibb.co/84TCyPNf/logo.png"
-                alt="Lamonte Logo"
-                className="h-10"
-                referrerPolicy="no-referrer"
-              />
               <div className="flex items-center gap-4">
+                <img
+                  src="https://i.ibb.co/84TCyPNf/logo.png"
+                  alt="Lamonte Logo"
+                  className="h-10"
+                  referrerPolicy="no-referrer"
+                />
+                <span className="text-xs uppercase tracking-widest font-bold text-[#A65E3E] bg-[#A65E3E]/10 px-3 py-1 rounded-full">
+                  Admin Panel
+                </span>
+              </div>
+              <div className="flex items-center gap-4">
+                <button 
+                  onClick={() => setView('menu')}
+                  className="text-sm text-gray-500 hover:text-[#A65E3E] transition-colors"
+                >
+                  View Public Menu
+                </button>
                 <div className="flex items-center gap-2 px-4 py-2 bg-[#f9f9f7] rounded-full text-sm text-gray-600">
                   <User className="w-4 h-4" />
                   {session.user.user_metadata?.full_name || session.user.email}
@@ -270,33 +461,488 @@ export default function App() {
             </nav>
 
             <main className="flex-1 p-8 max-w-7xl mx-auto w-full">
-              <div className="mb-12">
-                <h1 className="text-5xl font-bold text-[#A65E3E] mb-4">
-                  Welco to Lamonte
-                </h1>
-                <p className="text-xl text-gray-500 max-w-2xl">
-                  Experience the finest flavors and a warm atmosphere at our restaurant & cafe.
-                </p>
-              </div>
+              {adminSubView === 'dashboard' ? (
+                <>
+                  <div className="mb-12">
+                    <h1 className="text-5xl font-bold text-[#A65E3E] mb-4">
+                      Admin Dashboard
+                    </h1>
+                    <p className="text-xl text-gray-500 max-w-2xl">
+                      Manage your menu items, reservations, and restaurant settings.
+                    </p>
+                  </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                {[
-                  { title: "Our Menu", desc: "Explore our curated selection of dishes.", icon: "🍽️" },
-                  { title: "Reservations", desc: "Book your table for an unforgettable evening.", icon: "📅" },
-                  { title: "Special Events", desc: "Join us for live music and seasonal celebrations.", icon: "✨" }
-                ].map((item, i) => (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    {[
+                      { title: "Manage Menu", desc: "Add, edit, or remove menu items.", icon: "🍔", view: 'menu' },
+                      { title: "Reservations", desc: "View and manage table bookings.", icon: "📅", view: 'dashboard' },
+                      { title: "Analytics", desc: "Track your restaurant's performance.", icon: "📈", view: 'dashboard' }
+                    ].map((item, i) => (
+                      <motion.div
+                        key={i}
+                        whileHover={{ y: -5 }}
+                        onClick={() => item.view === 'menu' && setAdminSubView('menu')}
+                        className="bg-white p-8 rounded-[32px] border border-[#e5e5e0] shadow-sm hover:shadow-md transition-all cursor-pointer"
+                      >
+                        <div className="text-4xl mb-4">{item.icon}</div>
+                        <h3 className="text-2xl font-bold mb-2">{item.title}</h3>
+                        <p className="text-gray-500">{item.desc}</p>
+                      </motion.div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-8">
+                  <div className="flex items-center justify-between">
+                    <button 
+                      onClick={() => setAdminSubView('dashboard')}
+                      className="flex items-center gap-2 text-gray-400 hover:text-[#A65E3E] transition-colors"
+                    >
+                      <ArrowLeft className="w-5 h-5" />
+                      Back to Dashboard
+                    </button>
+                    <div className="flex items-center gap-4">
+                      <button
+                        onClick={handleSyncMenu}
+                        disabled={authLoading}
+                        className="flex items-center gap-2 px-6 py-3 bg-white border border-[#e5e5e0] text-[#A65E3E] rounded-2xl font-bold hover:bg-[#f9f9f7] transition-all disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-5 h-5 ${authLoading ? 'animate-spin' : ''}`} />
+                        Sync Official Menu
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEditingItem({ name: '', description: '', price: 0, category: 'Drinks', subcategory: 'Coffee', image_url: '' });
+                          setIsModalOpen(true);
+                        }}
+                        className="flex items-center gap-2 px-6 py-3 bg-[#A65E3E] text-white rounded-2xl font-bold hover:bg-[#8d4f34] transition-all shadow-lg shadow-[#A65E3E]/20"
+                      >
+                        <Plus className="w-5 h-5" />
+                        Add New Item
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-[32px] border border-[#e5e5e0] overflow-hidden">
+                    <table className="w-full text-left">
+                      <thead className="bg-[#f9f9f7] border-b border-[#e5e5e0]">
+                        <tr>
+                          <th className="px-6 py-4 text-xs uppercase tracking-widest font-bold text-gray-400">Item</th>
+                          <th className="px-6 py-4 text-xs uppercase tracking-widest font-bold text-gray-400">Category</th>
+                          <th className="px-6 py-4 text-xs uppercase tracking-widest font-bold text-gray-400">Price</th>
+                          <th className="px-6 py-4 text-xs uppercase tracking-widest font-bold text-gray-400 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#e5e5e0]">
+                        {menuItems.map((item) => (
+                          <tr key={item.id} className="hover:bg-[#f9f9f7] transition-colors">
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 rounded-xl bg-gray-100 overflow-hidden flex-shrink-0">
+                                  {item.image_url ? (
+                                    <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-gray-300">
+                                      <ImageIcon className="w-6 h-6" />
+                                    </div>
+                                  )}
+                                </div>
+                                <div>
+                                  <div className="font-bold text-[#1a1a1a]">{item.name}</div>
+                                  <div className="text-xs text-gray-400 line-clamp-1">{item.description}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="text-xs font-bold uppercase tracking-tighter text-[#A65E3E] bg-[#A65E3E]/10 px-2 py-1 rounded-md">
+                                {item.category}
+                              </span>
+                              <span className="ml-2 text-xs text-gray-400">{item.subcategory}</span>
+                            </td>
+                            <td className="px-6 py-4 font-bold text-[#1a1a1a]">
+                              {item.price.toLocaleString()} <span className="text-[10px] text-gray-400">IQD</span>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => {
+                                    setEditingItem(item);
+                                    setIsModalOpen(true);
+                                  }}
+                                  className="p-2 text-gray-400 hover:text-[#A65E3E] transition-colors"
+                                >
+                                  <Edit2 className="w-5 h-5" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteItem(item.id)}
+                                  className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                                >
+                                  <Trash2 className="w-5 h-5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </main>
+
+            {/* Edit Modal */}
+            <AnimatePresence>
+              {isModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
                   <motion.div
-                    key={i}
-                    whileHover={{ y: -5 }}
-                    className="bg-white p-8 rounded-[32px] border border-[#e5e5e0] shadow-sm hover:shadow-md transition-all"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={() => setIsModalOpen(false)}
+                    className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                  />
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                    className="relative w-full max-w-2xl bg-white rounded-[40px] shadow-2xl overflow-hidden"
                   >
-                    <div className="text-4xl mb-4">{item.icon}</div>
-                    <h3 className="text-2xl font-bold mb-2">{item.title}</h3>
-                    <p className="text-gray-500">{item.desc}</p>
+                    <div className="p-8 border-b border-[#e5e5e0] flex items-center justify-between">
+                      <h2 className="text-3xl font-bold text-[#A65E3E]">
+                        {editingItem?.id ? 'Edit Item' : 'New Menu Item'}
+                      </h2>
+                      <button onClick={() => setIsModalOpen(false)} className="p-2 text-gray-400 hover:text-[#1a1a1a]">
+                        <X className="w-6 h-6" />
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleSaveItem} className="p-8 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <label className="text-xs uppercase tracking-widest font-bold text-gray-400 ml-1">Item Name</label>
+                          <input
+                            type="text"
+                            required
+                            value={editingItem?.name || ''}
+                            onChange={(e) => setEditingItem(prev => ({ ...prev, name: e.target.value }))}
+                            className="w-full px-4 py-3 bg-[#f9f9f7] border border-[#e5e5e0] rounded-2xl focus:ring-2 focus:ring-[#A65E3E]/20 focus:border-[#A65E3E] outline-none transition-all"
+                            placeholder="e.g. Spanish Latte"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs uppercase tracking-widest font-bold text-gray-400 ml-1">Price (IQD)</label>
+                          <input
+                            type="number"
+                            required
+                            value={editingItem?.price || 0}
+                            onChange={(e) => setEditingItem(prev => ({ ...prev, price: parseInt(e.target.value) }))}
+                            className="w-full px-4 py-3 bg-[#f9f9f7] border border-[#e5e5e0] rounded-2xl focus:ring-2 focus:ring-[#A65E3E]/20 focus:border-[#A65E3E] outline-none transition-all"
+                            placeholder="7000"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <label className="text-xs uppercase tracking-widest font-bold text-gray-400 ml-1">Category</label>
+                          <select
+                            value={editingItem?.category || 'Drinks'}
+                            onChange={(e) => setEditingItem(prev => ({ ...prev, category: e.target.value }))}
+                            className="w-full px-4 py-3 bg-[#f9f9f7] border border-[#e5e5e0] rounded-2xl focus:ring-2 focus:ring-[#A65E3E]/20 focus:border-[#A65E3E] outline-none transition-all"
+                          >
+                            <option value="Drinks">Drinks</option>
+                            <option value="SHISHA">SHISHA</option>
+                            <option value="FOOD">FOOD</option>
+                          </select>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs uppercase tracking-widest font-bold text-gray-400 ml-1">Subcategory</label>
+                          <input
+                            type="text"
+                            required
+                            value={editingItem?.subcategory || ''}
+                            onChange={(e) => setEditingItem(prev => ({ ...prev, subcategory: e.target.value }))}
+                            className="w-full px-4 py-3 bg-[#f9f9f7] border border-[#e5e5e0] rounded-2xl focus:ring-2 focus:ring-[#A65E3E]/20 focus:border-[#A65E3E] outline-none transition-all"
+                            placeholder="e.g. Coffee, Pasta, etc."
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs uppercase tracking-widest font-bold text-gray-400 ml-1">Description</label>
+                        <textarea
+                          value={editingItem?.description || ''}
+                          onChange={(e) => setEditingItem(prev => ({ ...prev, description: e.target.value }))}
+                          className="w-full px-4 py-3 bg-[#f9f9f7] border border-[#e5e5e0] rounded-2xl focus:ring-2 focus:ring-[#A65E3E]/20 focus:border-[#A65E3E] outline-none transition-all h-24 resize-none"
+                          placeholder="Describe your item..."
+                        />
+                      </div>
+
+                      <div className="space-y-4">
+                        <label className="text-xs uppercase tracking-widest font-bold text-gray-400 ml-1">Item Image</label>
+                        <div className="flex flex-col md:flex-row gap-4">
+                          <div className="flex-1 space-y-2">
+                            <input
+                              type="text"
+                              value={editingItem?.image_url || ''}
+                              onChange={(e) => setEditingItem(prev => ({ ...prev, image_url: e.target.value }))}
+                              className="w-full px-4 py-3 bg-[#f9f9f7] border border-[#e5e5e0] rounded-2xl focus:ring-2 focus:ring-[#A65E3E]/20 focus:border-[#A65E3E] outline-none transition-all"
+                              placeholder="Image URL or Base64"
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const input = document.createElement('input');
+                                  input.type = 'file';
+                                  input.accept = 'image/*';
+                                  input.onchange = (e: any) => {
+                                    const file = e.target.files[0];
+                                    if (file) {
+                                      const reader = new FileReader();
+                                      reader.onload = (re) => {
+                                        setEditingItem(prev => ({ ...prev, image_url: re.target?.result as string }));
+                                      };
+                                      reader.readAsDataURL(file);
+                                    }
+                                  };
+                                  input.click();
+                                }}
+                                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-white border border-[#e5e5e0] rounded-xl text-xs font-bold hover:bg-[#f9f9f7] transition-all"
+                              >
+                                <ImageIcon className="w-4 h-4" />
+                                Upload
+                              </button>
+                              <button
+                                type="button"
+                                onClick={generateImage}
+                                disabled={isGenerating}
+                                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-[#A65E3E]/10 text-[#A65E3E] rounded-xl text-xs font-bold hover:bg-[#A65E3E]/20 transition-all disabled:opacity-50"
+                              >
+                                {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                                Generate AI
+                              </button>
+                            </div>
+                          </div>
+                          <div className="w-full md:w-48 h-48 bg-[#f9f9f7] border border-[#e5e5e0] rounded-[32px] overflow-hidden relative group">
+                            {editingItem?.image_url ? (
+                              <>
+                                <img src={editingItem.image_url} alt="Preview" className="w-full h-full object-cover" />
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                  <img 
+                                    src="https://i.ibb.co/84TCyPNf/logo.png" 
+                                    alt="Logo Overlay" 
+                                    className="w-12 h-12 object-contain opacity-80"
+                                  />
+                                </div>
+                              </>
+                            ) : (
+                              <div className="w-full h-full flex flex-col items-center justify-center text-gray-300 gap-2">
+                                <ImageIcon className="w-8 h-8" />
+                                <span className="text-[10px] font-bold uppercase tracking-widest">Preview</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="pt-4 flex gap-4">
+                        <button
+                          type="button"
+                          onClick={() => setIsModalOpen(false)}
+                          className="flex-1 py-4 bg-[#f9f9f7] text-gray-500 rounded-2xl font-bold hover:bg-[#f0f0ed] transition-all"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={authLoading}
+                          className="flex-1 py-4 bg-[#A65E3E] text-white rounded-2xl font-bold hover:bg-[#8d4f34] transition-all shadow-lg shadow-[#A65E3E]/20 flex items-center justify-center gap-2 disabled:opacity-70"
+                        >
+                          {authLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                          Save Item
+                        </button>
+                      </div>
+                    </form>
                   </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="menu"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="min-h-screen flex flex-col"
+          >
+            <header className="py-12 flex flex-col items-center bg-white border-b border-[#e5e5e0] sticky top-0 z-50">
+              <img
+                src="https://i.ibb.co/84TCyPNf/logo.png"
+                alt="Lamonte Logo"
+                className="h-20 mb-6"
+                referrerPolicy="no-referrer"
+              />
+              
+              <div className="flex gap-4 px-4 overflow-x-auto no-scrollbar w-full max-w-md justify-center">
+                {[
+                  { id: 'Drinks', icon: '☕' },
+                  { id: 'SHISHA', icon: '💨' },
+                  { id: 'FOOD', icon: '🍰' }
+                ].map((cat) => (
+                  <button
+                    key={cat.id}
+                    onClick={() => {
+                      const element = document.getElementById(`category-${cat.id}`);
+                      if (element) {
+                        const offset = 180; // Header height
+                        const bodyRect = document.body.getBoundingClientRect().top;
+                        const elementRect = element.getBoundingClientRect().top;
+                        const elementPosition = elementRect - bodyRect;
+                        const offsetPosition = elementPosition - offset;
+
+                        window.scrollTo({
+                          top: offsetPosition,
+                          behavior: 'smooth'
+                        });
+                      }
+                    }}
+                    className="flex flex-col items-center gap-1 px-6 py-3 rounded-2xl bg-[#f9f9f7] text-gray-400 hover:bg-[#f0f0ed] hover:text-[#A65E3E] transition-all min-w-[90px]"
+                  >
+                    <span className="text-2xl">{cat.icon}</span>
+                    <span className="text-[10px] uppercase tracking-widest font-bold">{cat.id}</span>
+                  </button>
                 ))}
               </div>
+            </header>
+
+            <main className="flex-1 p-8 max-w-7xl mx-auto w-full">
+              {menuLoading ? (
+                <div className="flex flex-col items-center justify-center py-24 gap-4">
+                  <Loader2 className="w-12 h-12 text-[#A65E3E] animate-spin" />
+                  <p className="text-gray-400 font-medium animate-pulse">Loading menu...</p>
+                </div>
+              ) : menuItems.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-24 gap-6 text-center">
+                  <div className="w-24 h-24 bg-[#f9f9f7] rounded-full flex items-center justify-center text-4xl">🍽️</div>
+                  <div className="space-y-2">
+                    <h3 className="text-2xl font-bold text-[#1a1a1a]">No Menu Items Yet</h3>
+                    <p className="text-gray-400 max-w-xs">Our kitchen is preparing something special. Please check back later!</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-24">
+                  {displayCategories.map(categoryName => {
+                    // Find the actual key in groupedMenu (case-insensitive)
+                    const actualKey = allCategories.find(k => k.toLowerCase() === categoryName.toLowerCase()) || categoryName;
+                    const subcategories = groupedMenu[actualKey];
+                    if (!subcategories) return null;
+                    
+                    return (
+                      <div key={actualKey} id={`category-${actualKey}`} className="space-y-8 scroll-mt-48">
+                        <div className="flex flex-col items-center gap-6">
+                          <div className="flex items-center gap-4 w-full">
+                            <div className="h-px flex-1 bg-[#e5e5e0]"></div>
+                            <h2 className="text-3xl font-bold text-[#A65E3E] uppercase tracking-[0.2em]">
+                              {actualKey}
+                            </h2>
+                            <div className="h-px flex-1 bg-[#e5e5e0]"></div>
+                          </div>
+                          
+                          {/* Subcategory Quick Links */}
+                          <div className="flex gap-2 overflow-x-auto no-scrollbar w-full pb-2">
+                            {Object.keys(subcategories).map(sub => (
+                              <button
+                                key={sub}
+                                onClick={() => {
+                                  const element = document.getElementById(`subcategory-${actualKey}-${sub}`);
+                                  if (element) {
+                                    const offset = 220; // Header + Subnav height
+                                    const bodyRect = document.body.getBoundingClientRect().top;
+                                    const elementRect = element.getBoundingClientRect().top;
+                                    const elementPosition = elementRect - bodyRect;
+                                    const offsetPosition = elementPosition - offset;
+                                    window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
+                                  }
+                                }}
+                                className="px-4 py-2 rounded-full bg-white border border-[#e5e5e0] text-[10px] font-bold uppercase tracking-wider text-gray-500 whitespace-nowrap hover:border-[#A65E3E] hover:text-[#A65E3E] transition-all"
+                              >
+                                {sub}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 gap-8">
+                          {Object.entries(subcategories).map(([subcategory, items]) => (
+                            <div key={subcategory} id={`subcategory-${actualKey}-${subcategory}`} className="space-y-4 scroll-mt-60">
+                              <button 
+                                onClick={() => toggleCategory(`${actualKey}-${subcategory}`)}
+                                className="flex items-center justify-between w-full p-4 bg-white rounded-2xl border border-[#e5e5e0] text-xl font-semibold text-[#1a1a1a] hover:border-[#A65E3E] transition-all"
+                              >
+                                <span className="flex items-center gap-3">
+                                  <span className="w-1.5 h-6 bg-[#A65E3E] rounded-full"></span>
+                                  {subcategory}
+                                </span>
+                                {expandedCategories[`${actualKey}-${subcategory}`] ? <ChevronDown className="text-[#A65E3E]" /> : <ChevronRight className="text-gray-300" />}
+                              </button>
+                              
+                              <AnimatePresence>
+                                {expandedCategories[`${actualKey}-${subcategory}`] && (
+                                  <motion.div 
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: 'auto', opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    className="overflow-hidden"
+                                  >
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
+                                      {(items as MenuItem[]).map((item) => (
+                                        <motion.div
+                                          key={item.id}
+                                          initial={{ opacity: 0, scale: 0.95 }}
+                                          animate={{ opacity: 1, scale: 1 }}
+                                          className="bg-white p-5 rounded-2xl border border-[#e5e5e0] shadow-sm flex justify-between items-center group hover:border-[#A65E3E]/30 transition-all"
+                                        >
+                                          <div className="flex-1">
+                                            <h3 className="text-lg font-bold text-[#1a1a1a] group-hover:text-[#A65E3E] transition-colors">
+                                              {item.name}
+                                            </h3>
+                                            {item.description && (
+                                              <p className="text-gray-400 text-xs mt-1 line-clamp-2">{item.description}</p>
+                                            )}
+                                          </div>
+                                          <div className="ml-4 text-right">
+                                            <div className="text-[#A65E3E] font-bold text-lg">
+                                              {item.price.toLocaleString()}
+                                            </div>
+                                            <div className="text-[10px] text-gray-300 font-bold uppercase tracking-tighter">IQD</div>
+                                          </div>
+                                        </motion.div>
+                                      ))}
+                                    </div>
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </main>
+
+            <footer className="mt-24 pb-12 flex flex-col items-center border-t border-[#e5e5e0] pt-12">
+              <p className="text-gray-400 text-sm mb-8">© 2026 Lamonte Restaurant & Cafe. All rights reserved.</p>
+              <button
+                onClick={() => setView('auth')}
+                className="flex items-center gap-2 px-6 py-3 bg-white border border-[#e5e5e0] rounded-full text-xs uppercase tracking-widest font-bold text-gray-400 hover:text-[#A65E3E] hover:border-[#A65E3E] transition-all"
+              >
+                <Lock className="w-4 h-4" />
+                Admin Panel
+              </button>
+            </footer>
           </motion.div>
         )}
       </AnimatePresence>
