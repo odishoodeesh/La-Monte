@@ -144,6 +144,17 @@ DECLARE
     food_id UUID;
     hot_drinks_id UUID;
     cold_drinks_id UUID;
+    cold_brew_id UUID;
+    frappe_id UUID;
+    mojito_id UUID;
+    smoothies_id UUID;
+    milkshake_id UUID;
+    redbull_id UUID;
+    refreshing_id UUID;
+    fresh_juice_id UUID;
+    detox_id UUID;
+    tea_id UUID;
+    water_id UUID;
     lamonte_id UUID;
     sweets_id UUID;
     toasts_id UUID;
@@ -167,9 +178,42 @@ BEGIN
     INSERT INTO public.subcategories (category_id, name, display_order) 
     VALUES (drinks_id, 'COLD DRINKS', 2) RETURNING id INTO cold_drinks_id;
 
+    INSERT INTO public.subcategories (category_id, name, display_order) 
+    VALUES (drinks_id, 'COLD BREW', 3) RETURNING id INTO cold_brew_id;
+
+    INSERT INTO public.subcategories (category_id, name, display_order) 
+    VALUES (drinks_id, 'COFFEE FRAPPE', 4) RETURNING id INTO frappe_id;
+
+    INSERT INTO public.subcategories (category_id, name, display_order) 
+    VALUES (drinks_id, 'MOJITO', 5) RETURNING id INTO mojito_id;
+
+    INSERT INTO public.subcategories (category_id, name, display_order) 
+    VALUES (drinks_id, 'SMOTHIES', 6) RETURNING id INTO smoothies_id;
+
+    INSERT INTO public.subcategories (category_id, name, display_order) 
+    VALUES (drinks_id, 'MILKSHAKE', 7) RETURNING id INTO milkshake_id;
+
+    INSERT INTO public.subcategories (category_id, name, display_order) 
+    VALUES (drinks_id, 'RED BULL', 8) RETURNING id INTO redbull_id;
+
+    INSERT INTO public.subcategories (category_id, name, display_order) 
+    VALUES (drinks_id, 'REFRESHING DRINKS', 9) RETURNING id INTO refreshing_id;
+
+    INSERT INTO public.subcategories (category_id, name, display_order) 
+    VALUES (drinks_id, 'FRESH JUICE', 10) RETURNING id INTO fresh_juice_id;
+
+    INSERT INTO public.subcategories (category_id, name, display_order) 
+    VALUES (drinks_id, 'DETOX', 11) RETURNING id INTO detox_id;
+
+    INSERT INTO public.subcategories (category_id, name, display_order) 
+    VALUES (drinks_id, 'TEA', 12) RETURNING id INTO tea_id;
+
+    INSERT INTO public.subcategories (category_id, name, display_order) 
+    VALUES (drinks_id, 'WATER', 13) RETURNING id INTO water_id;
+
     -- Subcategories for SHISHA
     INSERT INTO public.subcategories (category_id, name, display_order) 
-    VALUES (shisha_id, 'Lamonte', 1) RETURNING id INTO lamonte_id;
+    VALUES (shisha_id, 'SHISHA', 1) RETURNING id INTO lamonte_id;
 
     -- Subcategories for FOOD
     INSERT INTO public.subcategories (category_id, name, display_order) 
@@ -178,30 +222,178 @@ BEGIN
     INSERT INTO public.subcategories (category_id, name, display_order) 
     VALUES (food_id, 'TOASTS', 2) RETURNING id INTO toasts_id;
 
-    -- Sample Items: HOT DRINKS
-    INSERT INTO public.items (subcategory_id, name, price, description) VALUES 
-    (hot_drinks_id, 'Double Espresso', 4000, 'Rich and bold double shot'),
-    (hot_drinks_id, 'Cappuccino', 5000, 'Classic Italian coffee'),
-    (hot_drinks_id, 'Turkish Coffee', 3500, 'Traditional strong coffee');
+    -- Items: HOT DRINKS
+    INSERT INTO public.items (subcategory_id, name, price) VALUES 
+    (hot_drinks_id, 'Double Espresso', 4000),
+    (hot_drinks_id, 'Espresso', 3000),
+    (hot_drinks_id, 'Americano', 4500),
+    (hot_drinks_id, 'Cappuccino', 5000),
+    (hot_drinks_id, 'Café Mocha', 6000),
+    (hot_drinks_id, 'Hot Chocolate', 4500),
+    (hot_drinks_id, 'Matcha Latte', 6000),
+    (hot_drinks_id, 'Café Latte', 5000),
+    (hot_drinks_id, 'Vanila Latte', 5500),
+    (hot_drinks_id, 'IRISH CARAMEL LATTE', 5500),
+    (hot_drinks_id, 'ESPPRESO MACCHIATO', 3500),
+    (hot_drinks_id, 'milk', 2000),
+    (hot_drinks_id, 'CRAMEL LATTE', 5500),
+    (hot_drinks_id, 'SPANISH LATTE', 6000),
+    (hot_drinks_id, 'CORTADO', 5000),
+    (hot_drinks_id, 'COCONUT LATTE', 5500),
+    (hot_drinks_id, 'PASSION HOT LEMONADAE', 5000),
+    (hot_drinks_id, 'CANNELA LATTE', 5500),
+    (hot_drinks_id, 'LAMONTE', 6000),
+    (hot_drinks_id, 'Turkish Coffee', 3000),
+    (hot_drinks_id, 'PISTACHIO COFFEE', 3000),
+    (hot_drinks_id, 'MENENGIÇ COFFEE', 3000),
+    (hot_drinks_id, 'V60', 6000),
+    (hot_drinks_id, 'HIBISCUS TEA', 3000),
+    (hot_drinks_id, 'HOT CHOCOLATE MARSHMALLOW', 6000),
+    (hot_drinks_id, 'ESPRESSO AFFOGATO', 5000),
+    (hot_drinks_id, 'TEA', 5000);
 
-    -- Sample Items: COLD DRINKS
-    INSERT INTO public.items (subcategory_id, name, price, description) VALUES 
-    (cold_drinks_id, 'ICED AMERICANO', 5000, 'Refreshing cold coffee'),
-    (cold_drinks_id, 'Fresh Orange Juice', 6000, '100% natural');
+    -- Items: COLD DRINKS
+    INSERT INTO public.items (subcategory_id, name, price) VALUES 
+    (cold_drinks_id, 'ICED AMERICANO', 5000),
+    (cold_drinks_id, 'COOKIES ICED LATTE', 6000),
+    (cold_drinks_id, 'ROSA ICED LATTE', 6000),
+    (cold_drinks_id, 'IRISH CRAMEL ICED', 6000),
+    (cold_drinks_id, 'HAZELNUT ICED COFFEE', 6000),
+    (cold_drinks_id, 'ICED LATTE CLASSIC', 5000),
+    (cold_drinks_id, 'WHITE MOCHA ICED LATTE', 6000),
+    (cold_drinks_id, 'ICED SPANSH LATTE', 6000),
+    (cold_drinks_id, 'ICED LATTE MACRON', 6000),
+    (cold_drinks_id, 'ICED MOCHA', 6000),
+    (cold_drinks_id, 'ICED CINAMON LATTE', 6000),
+    (cold_drinks_id, 'ICED VANILA LATTE', 6000),
+    (cold_drinks_id, 'ICED COCONUT LATTE', 6000),
+    (cold_drinks_id, 'ICED LATTE STRAWBERRY', 6000),
+    (cold_drinks_id, 'ROSA MORANGO ICED LATTE', 6000),
+    (cold_drinks_id, 'BUTTER POP CORN ICED LATTE', 6000),
+    (cold_drinks_id, 'LAMONTE', 6000),
+    (cold_drinks_id, 'ICED CARAMEL LATTE', 6000),
+    (cold_drinks_id, 'V60', 6000);
 
-    -- Sample Items: SHISHA
-    INSERT INTO public.items (subcategory_id, name, price, description) VALUES 
-    (lamonte_id, 'Double Apple', 10000, 'Classic flavor'),
-    (lamonte_id, 'Mint', 10000, 'Cool and refreshing');
+    -- Items: COLD BREW
+    INSERT INTO public.items (subcategory_id, name, price) VALUES 
+    (cold_brew_id, 'ORANGE COLD BREW', 6000),
+    (cold_brew_id, 'COLD BREW', 5000);
 
-    -- Sample Items: SWEETS
-    INSERT INTO public.items (subcategory_id, name, price, description) VALUES 
-    (sweets_id, 'CHOCOLATE CAKE', 6500, 'Decadent chocolate layers'),
-    (sweets_id, 'Cheesecake', 7000, 'Creamy New York style');
+    -- Items: COFFEE FRAPPE
+    INSERT INTO public.items (subcategory_id, name, price) VALUES 
+    (frappe_id, 'FRAPPE MOCHA DARK', 6000),
+    (frappe_id, 'FRAPPE CRAMEL', 6000),
+    (frappe_id, 'FRAPPE CHOCOLATE', 6000),
+    (frappe_id, 'LAMONTE', 6000),
+    (frappe_id, 'FRAPPE CHOCO COCONUT', 6000),
+    (frappe_id, 'POP CORN CARAMEL', 6000);
 
-    -- Sample Items: TOASTS
-    INSERT INTO public.items (subcategory_id, name, price, description) VALUES 
-    (toasts_id, 'Cheese Toast', 4500, 'Melted cheese on sourdough'),
-    (toasts_id, 'Turkey & Cheese', 5500, 'Classic combination');
+    -- Items: MOJITO
+    INSERT INTO public.items (subcategory_id, name, price) VALUES 
+    (mojito_id, 'MOJITO STRAWBERRY', 6000),
+    (mojito_id, 'CLASSIC MOJITO', 5500),
+    (mojito_id, 'MOHITO GRENADINE', 6000),
+    (mojito_id, 'MOJITO BLUEBERRY', 6000),
+    (mojito_id, 'MOJITO MONGO', 6000),
+    (mojito_id, 'MOJITO CHERRY', 6000),
+    (mojito_id, 'MOJITO TANGRENA CINNAMON', 6000),
+    (mojito_id, 'MOJITO PEACH APRICOT', 6000),
+    (mojito_id, 'MOJITO LA MONTE', 6000);
+
+    -- Items: SMOTHIES
+    INSERT INTO public.items (subcategory_id, name, price) VALUES 
+    (smoothies_id, 'SMOOTHIE STRAWBERRY', 6000),
+    (smoothies_id, 'SMOOTHIE PASSION FRUIT', 6000),
+    (smoothies_id, 'SMOOTHIE MANGO', 6000),
+    (smoothies_id, 'SMOOTHIE PINEAPPLE', 6000),
+    (smoothies_id, 'SMOOTHIE GREEN APPLE', 6000),
+    (smoothies_id, 'SMOOTHIE BLUEBERRY', 6000),
+    (smoothies_id, 'JABUTICABA', 6000),
+    (smoothies_id, 'SMOOTHIE BLUEBERRY POMEGRANET', 6000),
+    (smoothies_id, 'SMOOTHIE JABUTICABA PEACH', 6000),
+    (smoothies_id, 'SMOOTHIE LA MONTE', 6000);
+
+    -- Items: MILKSHAKE
+    INSERT INTO public.items (subcategory_id, name, price) VALUES 
+    (milkshake_id, 'MILKSHAKE CHOCILAT', 6000),
+    (milkshake_id, 'milkshake lotus', 6000),
+    (milkshake_id, 'milkshake kindar chocolate', 6000),
+    (milkshake_id, 'milkshake caramel', 6000),
+    (milkshake_id, 'MILKSHAKE VANILA SCOTCH', 6000),
+    (milkshake_id, 'MILKSHAKE PISSION VANILA SHAKE', 6000),
+    (milkshake_id, 'MILKSHAKE LA MONTE', 6000),
+    (milkshake_id, 'MILKSHAKE STRAWBERRY', 6000);
+
+    -- Items: RED BULL
+    INSERT INTO public.items (subcategory_id, name, price) VALUES 
+    (redbull_id, 'RED BULL PEACH CURACAO', 6000),
+    (redbull_id, 'RED BULL STRAWBERRY', 6000),
+    (redbull_id, 'RED BULL LA MONTE', 6000),
+    (redbull_id, 'RED BULL BLUEBERRY', 6000),
+    (redbull_id, 'CLASSIC REDBULL', 4000);
+
+    -- Items: REFRESHING DRINKS
+    INSERT INTO public.items (subcategory_id, name, price) VALUES 
+    (refreshing_id, 'PESCA FRAGOLA', 6000),
+    (refreshing_id, 'VERDE FRIZZANTE MATCHA', 6000),
+    (refreshing_id, 'MARGETA LARANGA', 6000),
+    (refreshing_id, 'RUBER AESTIVUS', 6000),
+    (refreshing_id, 'TROPSIK', 6000),
+    (refreshing_id, 'WATERMELON STRAWBERRY LEMONADA', 6000),
+    (refreshing_id, 'MABELLA', 6000);
+
+    -- Items: FRESH JUICE
+    INSERT INTO public.items (subcategory_id, name, price) VALUES 
+    (fresh_juice_id, 'LEMON & MINT', 5000),
+    (fresh_juice_id, 'ORANGE', 5000),
+    (fresh_juice_id, 'ORANGE AND MANGO', 6000),
+    (fresh_juice_id, 'AVOCADO JUICE', 6000),
+    (fresh_juice_id, 'COCTAIL', 6000);
+
+    -- Items: DETOX
+    INSERT INTO public.items (subcategory_id, name, price) VALUES 
+    (detox_id, 'CLEAR SKIN DETOX', 5000),
+    (detox_id, 'BLOOD FLOW DETOX', 6000),
+    (detox_id, 'Bloom cleanse', 6000);
+
+    -- Items: TEA
+    INSERT INTO public.items (subcategory_id, name, price) VALUES 
+    (tea_id, 'ROUGE ICED TEA', 5000),
+    (tea_id, 'RASPBERRY ICED TEA', 5000),
+    (tea_id, 'PEACH ICED TEA', 5000);
+
+    -- Items: WATER
+    INSERT INTO public.items (subcategory_id, name, price) VALUES 
+    (water_id, 'water', 1000),
+    (water_id, 'TONIC', 2000);
+
+    -- Items: SHISHA
+    INSERT INTO public.items (subcategory_id, name, price) VALUES 
+    (lamonte_id, 'SHISHA', 10000),
+    (lamonte_id, 'limen shisha', 10000),
+    (lamonte_id, 'LAMONTE', 10000),
+    (lamonte_id, 'APPLE', 10000),
+    (lamonte_id, 'mint', 10000),
+    (lamonte_id, 'natural', 15000),
+    (lamonte_id, 'SHESHA', 5000),
+    (lamonte_id, 'FRESH', 15000);
+
+    -- Items: SWEETS AND CAKE
+    INSERT INTO public.items (subcategory_id, name, price) VALUES 
+    (sweets_id, 'CLASSIC CROISSANT', 5000),
+    (sweets_id, 'PISTACHIO CROISSANT', 6000),
+    (sweets_id, 'NUTELLA CROISSANT', 6000),
+    (sweets_id, 'CINNAMON CROISSANT', 6000),
+    (sweets_id, 'CHOCOLATE CAKE', 6500),
+    (sweets_id, 'PISTACHIO CAKE', 6500),
+    (sweets_id, 'CHEESE CAKE', 6500),
+    (sweets_id, 'Cookis', 2000);
+
+    -- Items: TOASTS
+    INSERT INTO public.items (subcategory_id, name, price) VALUES 
+    (toasts_id, 'CHEESE TOAST', 6000),
+    (toasts_id, 'AVOCADO TOAST', 6000),
+    (toasts_id, 'TUNA TOAST', 6000),
+    (toasts_id, 'SMOKED TURKEY SANDWICH', 7000);
 
 END $$;

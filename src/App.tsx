@@ -170,7 +170,7 @@ export default function App() {
     return acc;
   }, {} as Record<string, Record<string, MenuItem[]>>);
 
-  const mainCategories = ['Drinks', 'SHISHA', 'FOOD'];
+  const mainCategories = ['DRINKS', 'SHISHA', 'FOOD'];
   
   // Get all categories from data to ensure we don't miss any
   const allCategories = Object.keys(groupedMenu);
@@ -1187,7 +1187,7 @@ export default function App() {
               
               <div className="flex gap-4 px-4 overflow-x-auto no-scrollbar w-full max-w-md justify-center">
                 {[
-                  { id: 'Drinks', icon: '☕' },
+                  { id: 'DRINKS', icon: '☕' },
                   { id: 'SHISHA', icon: '💨' },
                   { id: 'FOOD', icon: '🍰' }
                 ].map((cat) => (
