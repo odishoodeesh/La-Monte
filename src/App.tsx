@@ -306,16 +306,22 @@ export default function App() {
 
     setAuthLoading(true);
     try {
+      // Get the Main Menu ID first
+      const { data: menuData } = await supabase.from('menus').select('id').eq('name', 'Main Menu').single();
+      const menuId = menuData?.id;
+
+      if (!menuId) throw new Error("Main Menu not found. Please refresh the page.");
+
       if (editingCategory.id) {
         const { error } = await supabase
           .from('categories')
-          .update({ name: editingCategory.name })
+          .update({ name: editingCategory.name, menu_id: menuId })
           .eq('id', editingCategory.id);
         if (error) throw error;
       } else {
         const { error } = await supabase
           .from('categories')
-          .insert([{ name: editingCategory.name }]);
+          .insert([{ name: editingCategory.name, menu_id: menuId }]);
         if (error) throw error;
       }
       setIsCategoryModalOpen(false);
