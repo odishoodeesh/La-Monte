@@ -101,7 +101,7 @@ export default function App() {
     setMenuLoading(true);
     try {
       const { data, error } = await supabase
-        .from('menu_items')
+        .from('items')
         .select(`
           *,
           subcategories (
@@ -109,7 +109,11 @@ export default function App() {
             name,
             categories (
               id,
-              name
+              name,
+              menus (
+                id,
+                name
+              )
             )
           )
         `)
@@ -136,19 +140,28 @@ export default function App() {
   const autoPopulateMenu = async () => {
     if (categories.length > 0 || menuLoading || authLoading) return;
     
-    // Check if categories really don't exist in DB
-    const { count } = await supabase.from('categories').select('*', { count: 'exact', head: true });
-    if (count !== 0) return;
+    // Check if menus exists
+    const { data: menuCheck } = await supabase.from('menus').select('id').limit(1);
+    if (menuCheck && menuCheck.length > 0) return;
 
-    console.log('Auto-populating menu...');
+    console.log('Auto-populating menu hierarchy...');
     setAuthLoading(true);
     try {
+      // 1. Create Main Menu
+      const { data: menuData, error: menuError } = await supabase
+        .from('menus')
+        .insert({ name: 'Main Menu' })
+        .select()
+        .single();
+      
+      if (menuError) throw menuError;
+
       const catNames = [...new Set(initialMenuData.map(item => item.category))];
       
       for (const catName of catNames) {
         const { data: catData, error: catError } = await supabase
           .from('categories')
-          .insert({ name: catName })
+          .insert({ menu_id: menuData.id, name: catName })
           .select()
           .single();
         
@@ -172,7 +185,7 @@ export default function App() {
           );
 
           const { error: itemError } = await supabase
-            .from('menu_items')
+            .from('items')
             .insert(items.map(item => ({
               subcategory_id: subData.id,
               name: item.name,
@@ -387,13 +400,13 @@ export default function App() {
 
       if (editingItem.id) {
         const { error } = await supabase
-          .from('menu_items')
+          .from('items')
           .update(itemToSave)
           .eq('id', editingItem.id);
         if (error) throw error;
       } else {
         const { error } = await supabase
-          .from('menu_items')
+          .from('items')
           .insert([itemToSave]);
         if (error) throw error;
       }
@@ -411,7 +424,7 @@ export default function App() {
     if (!confirm('Are you sure you want to delete this item?')) return;
     try {
       const { error } = await supabase
-        .from('menu_items')
+        .from('items')
         .delete()
         .eq('id', id);
       if (error) throw error;
