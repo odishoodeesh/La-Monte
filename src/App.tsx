@@ -47,7 +47,7 @@ export default function App() {
   const [menuLoading, setMenuLoading] = useState(true);
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string>('Drinks');
+  const [selectedCategory, setSelectedCategory] = useState<string>('DRINKS');
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [adminSubView, setAdminSubView] = useState<'dashboard' | 'menu' | 'categories' | 'subcategories'>('dashboard');
   const [editingItem, setEditingItem] = useState<Partial<MenuItem> | null>(null);
