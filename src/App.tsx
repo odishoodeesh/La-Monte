@@ -8,7 +8,6 @@ import { motion, AnimatePresence } from "motion/react";
 import { supabase } from "./lib/supabase";
 import { LogIn, UserPlus, LogOut, Mail, Lock, Loader2, User, ChevronRight, ChevronDown, Plus, Edit2, Trash2, Image as ImageIcon, Sparkles, X, Save, ArrowLeft, RefreshCw } from "lucide-react";
 import { GoogleGenAI } from "@google/genai";
-import { initialMenuData } from "./data/menuData";
 
 interface MenuItem {
   id: string;
@@ -136,82 +135,6 @@ export default function App() {
       setMenuLoading(false);
     }
   };
-
-  const autoPopulateMenu = async () => {
-    if (categories.length > 0 || menuLoading || authLoading) return;
-    
-    // Check if menus exists
-    const { data: menuCheck } = await supabase.from('menus').select('id').limit(1);
-    if (menuCheck && menuCheck.length > 0) return;
-
-    console.log('Auto-populating menu hierarchy...');
-    setAuthLoading(true);
-    try {
-      // 1. Create Main Menu
-      const { data: menuData, error: menuError } = await supabase
-        .from('menus')
-        .insert({ name: 'Main Menu' })
-        .select()
-        .single();
-      
-      if (menuError) throw menuError;
-
-      const catNames = [...new Set(initialMenuData.map(item => item.category))];
-      
-      for (const catName of catNames) {
-        const { data: catData, error: catError } = await supabase
-          .from('categories')
-          .insert({ menu_id: menuData.id, name: catName })
-          .select()
-          .single();
-        
-        if (catError) throw catError;
-
-        const subcats = [...new Set(initialMenuData
-          .filter(item => item.category === catName)
-          .map(item => item.subcategory))];
-
-        for (const subName of subcats) {
-          const { data: subData, error: subError } = await supabase
-            .from('subcategories')
-            .insert({ category_id: catData.id, name: subName })
-            .select()
-            .single();
-          
-          if (subError) throw subError;
-
-          const items = initialMenuData.filter(item => 
-            item.category === catName && item.subcategory === subName
-          );
-
-          const { error: itemError } = await supabase
-            .from('items')
-            .insert(items.map(item => ({
-              subcategory_id: subData.id,
-              name: item.name,
-              price: item.price,
-              description: item.description || '',
-              image_url: item.image_url || '',
-              is_available: true
-            })));
-          
-          if (itemError) throw itemError;
-        }
-      }
-      fetchCategories();
-      fetchMenu();
-    } catch (error) {
-      console.error('Auto-populate error:', error);
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!loading && categories.length === 0) {
-      autoPopulateMenu();
-    }
-  }, [loading, categories.length]);
 
   const fetchCategories = async () => {
     try {
@@ -666,7 +589,7 @@ export default function App() {
                       Admin Dashboard
                     </h1>
                     <p className="text-xl text-gray-500 max-w-2xl">
-                      Manage your menu items, reservations, and restaurant settings.
+                      Manage your menu items and restaurant settings.
                     </p>
                   </div>
 
@@ -675,7 +598,6 @@ export default function App() {
                       { title: "Manage Menu", desc: "Add, edit, or remove menu items.", icon: "🍔", view: 'menu' },
                       { title: "Categories", desc: "Manage top-level menu sections.", icon: "📂", view: 'categories' },
                       { title: "Subcategories", desc: "Manage nested menu groups.", icon: "📁", view: 'subcategories' },
-                      { title: "Reservations", desc: "View and manage table bookings.", icon: "📅", view: 'dashboard' },
                       { title: "Analytics", desc: "Track your restaurant's performance.", icon: "📈", view: 'dashboard' }
                     ].map((item, i) => (
                       <motion.div
