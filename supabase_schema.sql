@@ -269,22 +269,40 @@ BEGIN
 END $$;
 
 -- ==========================================
--- 6. STORAGE (Buckets & Policies)
+-- 6. STORAGE (Advanced Configuration)
 -- ==========================================
 
--- Enable storage by creating the bucket
+-- Ensure the bucket exists
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('menu-items', 'menu-items', true)
 ON CONFLICT (id) DO NOTHING;
 
--- Storage Policies
--- 1. Allow public to view images
-CREATE POLICY "Public Access"
+-- Enable RLS on storage tables for granular control
+ALTER TABLE storage.buckets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+
+-- BUCKET POLICIES (storage.buckets)
+-- 1. Allow public to view the 'menu-items' bucket metadata
+CREATE POLICY "Public Bucket View"
+ON storage.buckets FOR SELECT
+USING ( id = 'menu-items' );
+
+-- 2. Allow admins full control over all buckets
+CREATE POLICY "Admin Bucket Control"
+ON storage.buckets FOR ALL
+TO authenticated
+USING ( public.is_admin() )
+WITH CHECK ( public.is_admin() );
+
+-- OBJECT POLICIES (storage.objects)
+-- 1. Allow public to view images in 'menu-items'
+CREATE POLICY "Public Object View"
 ON storage.objects FOR SELECT
 USING ( bucket_id = 'menu-items' );
 
--- 2. Allow admins to manage images
-CREATE POLICY "Admin Full Access"
+-- 2. Allow admins full control over images in 'menu-items'
+CREATE POLICY "Admin Object Control"
 ON storage.objects FOR ALL
+TO authenticated
 USING ( bucket_id = 'menu-items' AND public.is_admin() )
 WITH CHECK ( bucket_id = 'menu-items' AND public.is_admin() );
