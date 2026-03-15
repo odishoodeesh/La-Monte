@@ -106,11 +106,9 @@ export default function App() {
           subcategories (
             id,
             name,
-            is_available,
             categories (
               id,
               name,
-              is_available,
               menus (
                 id,
                 name
@@ -122,12 +120,7 @@ export default function App() {
         .order('name', { ascending: true });
 
       if (data) {
-        const flattenedData = data
-          .filter((item: any) => 
-            item.subcategories?.is_available !== false && 
-            item.subcategories?.categories?.is_available !== false
-          )
-          .map((item: any) => ({
+        const flattenedData = data.map((item: any) => ({
           ...item,
           category: item.subcategories?.categories?.name || 'Uncategorized',
           subcategory: item.subcategories?.name || 'General',
@@ -245,21 +238,13 @@ export default function App() {
       if (editingCategory.id) {
         const { error } = await supabase
           .from('categories')
-          .update({ 
-            name: editingCategory.name, 
-            menu_id: menuId,
-            is_available: editingCategory.is_available ?? true
-          })
+          .update({ name: editingCategory.name, menu_id: menuId })
           .eq('id', editingCategory.id);
         if (error) throw error;
       } else {
         const { error } = await supabase
           .from('categories')
-          .insert([{ 
-            name: editingCategory.name, 
-            menu_id: menuId,
-            is_available: editingCategory.is_available ?? true
-          }]);
+          .insert([{ name: editingCategory.name, menu_id: menuId }]);
         if (error) throw error;
       }
       setIsCategoryModalOpen(false);
@@ -293,21 +278,13 @@ export default function App() {
       if (editingSubcategory.id) {
         const { error } = await supabase
           .from('subcategories')
-          .update({ 
-            name: editingSubcategory.name, 
-            category_id: editingSubcategory.category_id,
-            is_available: editingSubcategory.is_available ?? true
-          })
+          .update({ name: editingSubcategory.name, category_id: editingSubcategory.category_id })
           .eq('id', editingSubcategory.id);
         if (error) throw error;
       } else {
         const { error } = await supabase
           .from('subcategories')
-          .insert([{ 
-            name: editingSubcategory.name, 
-            category_id: editingSubcategory.category_id,
-            is_available: editingSubcategory.is_available ?? true
-          }]);
+          .insert([{ name: editingSubcategory.name, category_id: editingSubcategory.category_id }]);
         if (error) throw error;
       }
       setIsSubcategoryModalOpen(false);
@@ -673,7 +650,6 @@ export default function App() {
                       <thead className="bg-[#f9f9f7] border-b border-[#e5e5e0]">
                         <tr>
                           <th className="px-6 py-4 text-xs uppercase tracking-widest font-bold text-gray-400">Category Name</th>
-                          <th className="px-6 py-4 text-xs uppercase tracking-widest font-bold text-gray-400">Status</th>
                           <th className="px-6 py-4 text-xs uppercase tracking-widest font-bold text-gray-400 text-right">Actions</th>
                         </tr>
                       </thead>
@@ -681,11 +657,6 @@ export default function App() {
                         {categories.map((cat) => (
                           <tr key={cat.id} className="hover:bg-[#f9f9f7] transition-colors">
                             <td className="px-6 py-4 font-bold text-[#1a1a1a]">{cat.name}</td>
-                            <td className="px-6 py-4">
-                              <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-md ${cat.is_available !== false ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-                                {cat.is_available !== false ? 'Available' : 'Hidden'}
-                              </span>
-                            </td>
                             <td className="px-6 py-4 text-right">
                               <div className="flex items-center justify-end gap-2">
                                 <button
@@ -739,7 +710,6 @@ export default function App() {
                         <tr>
                           <th className="px-6 py-4 text-xs uppercase tracking-widest font-bold text-gray-400">Subcategory Name</th>
                           <th className="px-6 py-4 text-xs uppercase tracking-widest font-bold text-gray-400">Parent Category</th>
-                          <th className="px-6 py-4 text-xs uppercase tracking-widest font-bold text-gray-400">Status</th>
                           <th className="px-6 py-4 text-xs uppercase tracking-widest font-bold text-gray-400 text-right">Actions</th>
                         </tr>
                       </thead>
@@ -750,11 +720,6 @@ export default function App() {
                             <td className="px-6 py-4">
                               <span className="text-xs font-bold uppercase tracking-tighter text-[#A65E3E] bg-[#A65E3E]/10 px-2 py-1 rounded-md">
                                 {categories.find(c => c.id === sub.category_id)?.name}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-md ${sub.is_available !== false ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-                                {sub.is_available !== false ? 'Available' : 'Hidden'}
                               </span>
                             </td>
                             <td className="px-6 py-4 text-right">
@@ -912,19 +877,6 @@ export default function App() {
                         />
                       </div>
 
-                      <div className="flex items-center gap-3 p-4 bg-[#f9f9f7] rounded-2xl border border-[#e5e5e0]">
-                        <input
-                          type="checkbox"
-                          id="cat_available"
-                          checked={editingCategory?.is_available !== false}
-                          onChange={(e) => setEditingCategory(prev => ({ ...prev, is_available: e.target.checked }))}
-                          className="w-5 h-5 rounded border-gray-300 text-[#A65E3E] focus:ring-[#A65E3E]"
-                        />
-                        <label htmlFor="cat_available" className="text-sm font-bold text-gray-700 cursor-pointer">
-                          Available on Menu
-                        </label>
-                      </div>
-
                       <div className="pt-4 flex gap-4">
                         <button
                           type="button"
@@ -1000,19 +952,6 @@ export default function App() {
                           className="w-full px-4 py-3 bg-[#f9f9f7] border border-[#e5e5e0] rounded-2xl focus:ring-2 focus:ring-[#A65E3E]/20 focus:border-[#A65E3E] outline-none transition-all"
                           placeholder="e.g. Hot Drinks, Pasta, etc."
                         />
-                      </div>
-
-                      <div className="flex items-center gap-3 p-4 bg-[#f9f9f7] rounded-2xl border border-[#e5e5e0]">
-                        <input
-                          type="checkbox"
-                          id="sub_available"
-                          checked={editingSubcategory?.is_available !== false}
-                          onChange={(e) => setEditingSubcategory(prev => ({ ...prev, is_available: e.target.checked }))}
-                          className="w-5 h-5 rounded border-gray-300 text-[#A65E3E] focus:ring-[#A65E3E]"
-                        />
-                        <label htmlFor="sub_available" className="text-sm font-bold text-gray-700 cursor-pointer">
-                          Available on Menu
-                        </label>
                       </div>
 
                       <div className="pt-4 flex gap-4">
@@ -1270,13 +1209,15 @@ export default function App() {
               />
               
               <div className="flex gap-4 px-4 overflow-x-auto no-scrollbar w-full max-w-md justify-center">
-                {categories
-                  .filter(c => c.is_available !== false)
-                  .map((cat) => (
+                {[
+                  { id: 'DRINKS', icon: '☕' },
+                  { id: 'SHISHA', icon: '💨' },
+                  { id: 'FOOD', icon: '🍰' }
+                ].map((cat) => (
                   <button
                     key={cat.id}
                     onClick={() => {
-                      const element = document.getElementById(`category-${cat.name}`);
+                      const element = document.getElementById(`category-${cat.id}`);
                       if (element) {
                         const offset = 180; // Header height
                         const bodyRect = document.body.getBoundingClientRect().top;
@@ -1288,19 +1229,12 @@ export default function App() {
                           top: offsetPosition,
                           behavior: 'smooth'
                         });
-                        setSelectedCategory(cat.name);
                       }
                     }}
-                    className={`flex flex-col items-center gap-1 px-6 py-3 rounded-2xl transition-all min-w-[90px] ${
-                      selectedCategory === cat.name 
-                        ? 'bg-[#A65E3E] text-white shadow-lg shadow-[#A65E3E]/30 scale-105' 
-                        : 'bg-[#f9f9f7] text-gray-400 hover:bg-[#f0f0ed] hover:text-[#A65E3E]'
-                    }`}
+                    className="flex flex-col items-center gap-1 px-6 py-3 rounded-2xl bg-[#f9f9f7] text-gray-400 hover:bg-[#f0f0ed] hover:text-[#A65E3E] transition-all min-w-[90px]"
                   >
-                    <span className="text-2xl">
-                      {cat.name === 'DRINKS' ? '☕' : cat.name === 'SHISHA' ? '💨' : '🍰'}
-                    </span>
-                    <span className="text-[10px] uppercase tracking-widest font-bold">{cat.name}</span>
+                    <span className="text-2xl">{cat.icon}</span>
+                    <span className="text-[10px] uppercase tracking-widest font-bold">{cat.id}</span>
                   </button>
                 ))}
               </div>
