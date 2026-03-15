@@ -16,7 +16,7 @@ CREATE TABLE public.profiles (
   id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   full_name TEXT,
   avatar_url TEXT,
-  role TEXT DEFAULT 'user' CHECK (role IN ('admin', 'user')),
+  user_role TEXT DEFAULT 'user' CHECK (user_role IN ('admin', 'user')),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -78,7 +78,7 @@ BEGIN
   RETURN (
     EXISTS (
       SELECT 1 FROM public.profiles 
-      WHERE id = auth.uid() AND role = 'admin'
+      WHERE id = auth.uid() AND user_role = 'admin'
     ) 
     OR (auth.jwt() ->> 'email' = 'odisho.odeesh@gmail.com')
   );
@@ -113,7 +113,7 @@ CREATE POLICY "Allow admin full access for items" ON public.items FOR ALL USING 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.profiles (id, full_name, avatar_url, role)
+  INSERT INTO public.profiles (id, full_name, avatar_url, user_role)
   VALUES (
     new.id, 
     new.raw_user_meta_data->>'full_name', 

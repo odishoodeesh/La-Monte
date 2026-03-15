@@ -381,8 +381,18 @@ export default function App() {
 
       const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
       if (imagePart?.inlineData) {
-        const imageUrl = `data:image/png;base64,${imagePart.inlineData.data}`;
-        setEditingItem(prev => ({ ...prev, image_url: imageUrl }));
+        const base64Image = `data:image/png;base64,${imagePart.inlineData.data}`;
+        
+        // Upload to server
+        const uploadRes = await fetch('/api/upload-base64', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: base64Image, name: editingItem.name })
+        });
+
+        if (!uploadRes.ok) throw new Error('Failed to upload generated image');
+        const { url } = await uploadRes.json();
+        setEditingItem(prev => ({ ...prev, image_url: url }));
       }
     } catch (error: any) {
       console.error('Generation error:', error);
@@ -1097,14 +1107,27 @@ export default function App() {
                                   const input = document.createElement('input');
                                   input.type = 'file';
                                   input.accept = 'image/*';
-                                  input.onchange = (e: any) => {
+                                  input.onchange = async (e: any) => {
                                     const file = e.target.files[0];
                                     if (file) {
-                                      const reader = new FileReader();
-                                      reader.onload = (re) => {
-                                        setEditingItem(prev => ({ ...prev, image_url: re.target?.result as string }));
-                                      };
-                                      reader.readAsDataURL(file);
+                                      setAuthLoading(true);
+                                      try {
+                                        const formData = new FormData();
+                                        formData.append('image', file);
+                                        
+                                        const uploadRes = await fetch('/api/upload', {
+                                          method: 'POST',
+                                          body: formData
+                                        });
+
+                                        if (!uploadRes.ok) throw new Error('Upload failed');
+                                        const { url } = await uploadRes.json();
+                                        setEditingItem(prev => ({ ...prev, image_url: url }));
+                                      } catch (err: any) {
+                                        alert('Failed to upload image: ' + err.message);
+                                      } finally {
+                                        setAuthLoading(false);
+                                      }
                                     }
                                   };
                                   input.click();
