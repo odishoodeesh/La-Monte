@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { supabase } from "./lib/supabase";
-import { LogIn, UserPlus, LogOut, Mail, Lock, Loader2, User, ChevronRight, ChevronDown, Plus, Edit2, Trash2, Image as ImageIcon, Sparkles, X, Save, ArrowLeft, RefreshCw } from "lucide-react";
+import { LogIn, UserPlus, LogOut, Mail, Lock, Loader2, User, ChevronRight, ChevronDown, Plus, Edit2, Trash2, Image as ImageIcon, Sparkles, X, Save, ArrowLeft, RefreshCw, Upload } from "lucide-react";
 import { GoogleGenAI } from "@google/genai";
 
 interface MenuItem {
@@ -56,6 +56,10 @@ export default function App() {
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isSubcategoryModalOpen, setIsSubcategoryModalOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
+  const [mediaFiles, setMediaFiles] = useState<any[]>([]);
+  const [isMediaLibraryOpen, setIsMediaLibraryOpen] = useState(false);
+  const [mediaLoading, setMediaLoading] = useState(false);
 
   useEffect(() => {
     // Expand all categories by default when menuItems are loaded
@@ -89,6 +93,7 @@ export default function App() {
 
     fetchMenu();
     fetchCategories();
+    fetchMedia();
 
     return () => {
       clearTimeout(timer);
@@ -153,6 +158,74 @@ export default function App() {
       if (error) throw error;
     } catch (error) {
       console.error('Error fetching categories:', error);
+    }
+  };
+
+  const fetchMedia = async () => {
+    setMediaLoading(true);
+    try {
+      const { data, error } = await supabase.storage
+        .from('menu-items')
+        .list('uploads', {
+          limit: 100,
+          offset: 0,
+          sortBy: { column: 'name', order: 'asc' },
+        });
+
+      if (error) throw error;
+      setMediaFiles(data || []);
+    } catch (error: any) {
+      console.error('Error fetching media:', error.message);
+    } finally {
+      setMediaLoading(false);
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setMediaLoading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+      const filePath = `uploads/${fileName}`;
+
+      const { error } = await supabase.storage
+        .from('menu-items')
+        .upload(filePath, file);
+
+      if (error) throw error;
+      
+      fetchMedia();
+    } catch (error: any) {
+      alert(error.message);
+    } finally {
+      setMediaLoading(false);
+    }
+  };
+
+  const getPublicUrl = (name: string) => {
+    const { data } = supabase.storage.from('menu-items').getPublicUrl(`uploads/${name}`);
+    return data.publicUrl;
+  };
+
+  const handleDeleteMedia = async (name: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm('Are you sure you want to delete this image?')) return;
+
+    setMediaLoading(true);
+    try {
+      const { error } = await supabase.storage
+        .from('menu-items')
+        .remove([`uploads/${name}`]);
+
+      if (error) throw error;
+      fetchMedia();
+    } catch (error: any) {
+      alert(error.message);
+    } finally {
+      setMediaLoading(false);
     }
   };
 
@@ -619,19 +692,26 @@ export default function App() {
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                    {[
-                      { title: "Manage Menu", desc: "Add, edit, or remove menu items.", icon: "🍔", view: 'menu' },
-                      { title: "Categories", desc: "Manage top-level menu sections.", icon: "📂", view: 'categories' },
-                      { title: "Subcategories", desc: "Manage nested menu groups.", icon: "📁", view: 'subcategories' },
-                      { title: "Analytics", desc: "Track your restaurant's performance.", icon: "📈", view: 'dashboard' }
-                    ].map((item, i) => (
-                      <motion.div
-                        key={i}
-                        whileHover={{ y: -5 }}
-                        onClick={() => item.view !== 'dashboard' && setAdminSubView(item.view as any)}
-                        className="bg-white p-8 rounded-[32px] border border-[#e5e5e0] shadow-sm hover:shadow-md transition-all cursor-pointer"
-                      >
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                        {[
+                          { title: "Manage Menu", desc: "Add, edit, or remove menu items.", icon: "🍔", view: 'menu' },
+                          { title: "Categories", desc: "Manage top-level menu sections.", icon: "📂", view: 'categories' },
+                          { title: "Subcategories", desc: "Manage nested menu groups.", icon: "📁", view: 'subcategories' },
+                          { title: "Media Library", desc: "Manage your uploaded pictures.", icon: "🖼️", action: () => setIsMediaLibraryOpen(true) },
+                          { title: "Analytics", desc: "Track your restaurant's performance.", icon: "📈", view: 'dashboard' }
+                        ].map((item, i) => (
+                          <motion.div
+                            key={i}
+                            whileHover={{ y: -5 }}
+                            onClick={() => {
+                              if ('action' in item) {
+                                item.action();
+                              } else if (item.view !== 'dashboard') {
+                                setAdminSubView(item.view as any);
+                              }
+                            }}
+                            className="bg-white p-8 rounded-[32px] border border-[#e5e5e0] shadow-sm hover:shadow-md transition-all cursor-pointer"
+                          >
                         <div className="text-4xl mb-4">{item.icon}</div>
                         <h3 className="text-2xl font-bold mb-2">{item.title}</h3>
                         <p className="text-gray-500">{item.desc}</p>
@@ -993,6 +1073,89 @@ export default function App() {
               )}
             </AnimatePresence>
 
+            {/* Media Library Modal */}
+            <AnimatePresence>
+              {isMediaLibraryOpen && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={() => setIsMediaLibraryOpen(false)}
+                    className="absolute inset-0 bg-black/80 backdrop-blur-md"
+                  />
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                    className="relative w-full max-w-4xl bg-white rounded-[40px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+                  >
+                    <div className="p-8 border-b border-[#e5e5e0] flex items-center justify-between bg-[#f9f9f7]">
+                      <div>
+                        <h2 className="text-3xl font-bold text-[#A65E3E]">Media Library</h2>
+                        <p className="text-sm text-gray-400">Choose a picture from the uploads folder</p>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <label className="cursor-pointer px-6 py-3 bg-[#A65E3E] text-white rounded-2xl font-bold hover:bg-[#8d4f34] transition-all shadow-lg shadow-[#A65E3E]/20 flex items-center gap-2">
+                          <Upload className="w-5 h-5" />
+                          Upload New
+                          <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} />
+                        </label>
+                        <button onClick={() => setIsMediaLibraryOpen(false)} className="p-2 text-gray-400 hover:text-[#1a1a1a]">
+                          <X className="w-6 h-6" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex-1 p-8 overflow-y-auto custom-scrollbar">
+                      {mediaLoading ? (
+                        <div className="h-64 flex flex-col items-center justify-center text-gray-400 gap-4">
+                          <Loader2 className="w-12 h-12 animate-spin" />
+                          <p className="font-bold uppercase tracking-widest text-xs">Loading Media...</p>
+                        </div>
+                      ) : mediaFiles.length === 0 ? (
+                        <div className="h-64 flex flex-col items-center justify-center text-gray-300 gap-4">
+                          <ImageIcon className="w-16 h-16" />
+                          <p className="font-bold uppercase tracking-widest text-xs">No pictures in uploads folder</p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                          {mediaFiles.map((file, i) => {
+                            const url = getPublicUrl(file.name);
+                            return (
+                              <motion.div
+                                key={i}
+                                whileHover={{ scale: 1.05 }}
+                                onClick={() => {
+                                  if (editingItem) {
+                                    setEditingItem(prev => ({ ...prev, image_url: url }));
+                                  }
+                                  setIsMediaLibraryOpen(false);
+                                }}
+                                className="aspect-square rounded-2xl border border-[#e5e5e0] overflow-hidden cursor-pointer group relative"
+                              >
+                                <img src={url} alt={file.name} className="w-full h-full object-cover" />
+                                <div className="absolute inset-0 bg-[#A65E3E]/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
+                                  <span className="text-white font-bold text-xs uppercase tracking-widest">Select</span>
+                                  <button
+                                    onClick={(e) => handleDeleteMedia(file.name, e)}
+                                    className="p-2 bg-white/20 hover:bg-red-500 rounded-full text-white transition-all"
+                                    title="Delete Image"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </motion.div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
+
             {/* Edit Modal */}
             <AnimatePresence>
               {isModalOpen && (
@@ -1109,13 +1272,23 @@ export default function App() {
                         <label className="text-xs uppercase tracking-widest font-bold text-gray-400 ml-1">Item Image</label>
                         <div className="flex flex-col md:flex-row gap-4">
                           <div className="flex-1 space-y-2">
-                            <input
-                              type="text"
-                              value={editingItem?.image_url || ''}
-                              onChange={(e) => setEditingItem(prev => ({ ...prev, image_url: e.target.value }))}
-                              className="w-full px-4 py-3 bg-[#f9f9f7] border border-[#e5e5e0] rounded-2xl focus:ring-2 focus:ring-[#A65E3E]/20 focus:border-[#A65E3E] outline-none transition-all"
-                              placeholder="Image URL or Base64"
-                            />
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                value={editingItem?.image_url || ''}
+                                onChange={(e) => setEditingItem(prev => ({ ...prev, image_url: e.target.value }))}
+                                className="flex-1 px-4 py-3 bg-[#f9f9f7] border border-[#e5e5e0] rounded-2xl focus:ring-2 focus:ring-[#A65E3E]/20 focus:border-[#A65E3E] outline-none transition-all"
+                                placeholder="Image URL"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setIsMediaLibraryOpen(true)}
+                                className="px-4 py-3 bg-white border border-[#e5e5e0] rounded-2xl text-[#A65E3E] hover:bg-[#A65E3E] hover:text-white transition-all flex items-center gap-2 font-bold text-xs"
+                              >
+                                <ImageIcon className="w-4 h-4" />
+                                Library
+                              </button>
+                            </div>
                             <div className="flex gap-2">
                               <button
                                 type="button"
@@ -1123,34 +1296,12 @@ export default function App() {
                                   const input = document.createElement('input');
                                   input.type = 'file';
                                   input.accept = 'image/*';
-                                  input.onchange = async (e: any) => {
-                                    const file = e.target.files[0];
-                                    if (file) {
-                                      setAuthLoading(true);
-                                      try {
-                                        const formData = new FormData();
-                                        formData.append('image', file);
-                                        
-                                        const uploadRes = await fetch('/api/upload', {
-                                          method: 'POST',
-                                          body: formData
-                                        });
-
-                                        if (!uploadRes.ok) throw new Error('Upload failed');
-                                        const { url } = await uploadRes.json();
-                                        setEditingItem(prev => ({ ...prev, image_url: url }));
-                                      } catch (err: any) {
-                                        alert('Failed to upload image: ' + err.message);
-                                      } finally {
-                                        setAuthLoading(false);
-                                      }
-                                    }
-                                  };
+                                  input.onchange = handleFileUpload;
                                   input.click();
                                 }}
                                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-white border border-[#e5e5e0] rounded-xl text-xs font-bold hover:bg-[#f9f9f7] transition-all"
                               >
-                                <ImageIcon className="w-4 h-4" />
+                                <Upload className="w-4 h-4" />
                                 Upload
                               </button>
                               <button
@@ -1341,7 +1492,8 @@ export default function App() {
                                           key={item.id}
                                           initial={{ opacity: 0, scale: 0.95 }}
                                           animate={{ opacity: 1, scale: 1 }}
-                                          className="bg-white p-5 rounded-2xl border border-[#e5e5e0] shadow-sm flex justify-between items-center group hover:border-[#A65E3E]/30 transition-all"
+                                          onClick={() => setSelectedItem(item)}
+                                          className="bg-white p-5 rounded-2xl border border-[#e5e5e0] shadow-sm flex justify-between items-center group hover:border-[#A65E3E]/30 transition-all cursor-pointer"
                                         >
                                           <div className="flex-1">
                                             <h3 className="text-lg font-bold text-[#1a1a1a] group-hover:text-[#A65E3E] transition-colors">
@@ -1384,6 +1536,91 @@ export default function App() {
               </button>
             </footer>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Item Detail Modal */}
+      <AnimatePresence>
+        {selectedItem && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedItem(null)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-lg bg-white rounded-[32px] shadow-2xl overflow-hidden border border-[#e5e5e0]"
+            >
+              <button 
+                onClick={() => setSelectedItem(null)}
+                className="absolute top-4 right-4 z-10 p-2 bg-white/80 backdrop-blur-md rounded-full text-gray-500 hover:text-[#1a1a1a] transition-all shadow-sm"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="aspect-square w-full bg-[#f9f9f7] relative">
+                {selectedItem.image_url ? (
+                  <img 
+                    src={selectedItem.image_url} 
+                    alt={selectedItem.name} 
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center text-gray-200 gap-4">
+                    <ImageIcon className="w-16 h-16" />
+                    <span className="text-xs font-bold uppercase tracking-[0.3em]">No Image</span>
+                  </div>
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent pointer-events-none" />
+              </div>
+
+              <div className="p-8 space-y-6">
+                <div className="flex justify-between items-start gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-[#A65E3E] bg-[#A65E3E]/10 px-2 py-1 rounded-md">
+                        {selectedItem.category}
+                      </span>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                        {selectedItem.subcategory}
+                      </span>
+                    </div>
+                    <h2 className="text-3xl font-bold text-[#1a1a1a] leading-tight">
+                      {selectedItem.name}
+                    </h2>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-3xl font-bold text-[#A65E3E]">
+                      {selectedItem.price.toLocaleString()}
+                    </div>
+                    <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">IQD</div>
+                  </div>
+                </div>
+
+                {selectedItem.description && (
+                  <div className="space-y-2">
+                    <h4 className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Description</h4>
+                    <p className="text-gray-600 leading-relaxed">
+                      {selectedItem.description}
+                    </p>
+                  </div>
+                )}
+
+                <button
+                  onClick={() => setSelectedItem(null)}
+                  className="w-full py-4 bg-[#A65E3E] text-white rounded-2xl font-bold hover:bg-[#8d4f34] transition-all shadow-lg shadow-[#A65E3E]/20"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>
