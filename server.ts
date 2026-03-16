@@ -40,7 +40,7 @@ async function startServer() {
 
       const fileExtension = path.extname(req.file.originalname) || ".png";
       const fileName = `${uuidv4()}${fileExtension}`;
-      const bucketName = process.env.S3_BUCKET || "menu-items";
+      const bucketName = process.env.S3_BUCKET || "uploads";
 
       const command = new PutObjectCommand({
         Bucket: bucketName,
@@ -77,7 +77,7 @@ async function startServer() {
       const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
       const buffer = Buffer.from(base64Data, "base64");
       const fileName = `${uuidv4()}.png`;
-      const bucketName = process.env.S3_BUCKET || "menu-items";
+      const bucketName = process.env.S3_BUCKET || "uploads";
 
       const command = new PutObjectCommand({
         Bucket: bucketName,

@@ -165,8 +165,8 @@ export default function App() {
     setMediaLoading(true);
     try {
       const { data, error } = await supabase.storage
-        .from('menu-items')
-        .list('uploads', {
+        .from('uploads')
+        .list('', {
           limit: 100,
           offset: 0,
           sortBy: { column: 'name', order: 'asc' },
@@ -189,10 +189,10 @@ export default function App() {
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
-      const filePath = `uploads/${fileName}`;
+      const filePath = `${fileName}`;
 
       const { error } = await supabase.storage
-        .from('menu-items')
+        .from('uploads')
         .upload(filePath, file);
 
       if (error) throw error;
@@ -206,7 +206,7 @@ export default function App() {
   };
 
   const getPublicUrl = (name: string) => {
-    const { data } = supabase.storage.from('menu-items').getPublicUrl(`uploads/${name}`);
+    const { data } = supabase.storage.from('uploads').getPublicUrl(`${name}`);
     return data.publicUrl;
   };
 
@@ -217,8 +217,8 @@ export default function App() {
     setMediaLoading(true);
     try {
       const { error } = await supabase.storage
-        .from('menu-items')
-        .remove([`uploads/${name}`]);
+        .from('uploads')
+        .remove([`${name}`]);
 
       if (error) throw error;
       fetchMedia();

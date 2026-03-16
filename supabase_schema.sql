@@ -34,7 +34,6 @@ CREATE TABLE public.categories (
   menu_id UUID REFERENCES public.menus(id) ON DELETE CASCADE NOT NULL,
   name TEXT NOT NULL,
   display_order INTEGER DEFAULT 0,
-  is_available BOOLEAN DEFAULT true,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   UNIQUE(menu_id, name)
 );
@@ -45,7 +44,6 @@ CREATE TABLE public.subcategories (
   category_id UUID REFERENCES public.categories(id) ON DELETE CASCADE NOT NULL,
   name TEXT NOT NULL,
   display_order INTEGER DEFAULT 0,
-  is_available BOOLEAN DEFAULT true,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   UNIQUE(category_id, name)
 );
@@ -276,7 +274,7 @@ END $$;
 
 -- Ensure the bucket exists
 INSERT INTO storage.buckets (id, name, public)
-VALUES ('menu-items', 'menu-items', true)
+VALUES ('uploads', 'uploads', true)
 ON CONFLICT (id) DO NOTHING;
 
 -- Enable RLS on storage tables for granular control
@@ -284,10 +282,10 @@ ALTER TABLE storage.buckets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
 
 -- BUCKET POLICIES (storage.buckets)
--- 1. Allow public to view the 'menu-items' bucket metadata
+-- 1. Allow public to view the 'uploads' bucket metadata
 CREATE POLICY "Public Bucket View"
 ON storage.buckets FOR SELECT
-USING ( id = 'menu-items' );
+USING ( id = 'uploads' );
 
 -- 2. Allow admins full control over all buckets
 CREATE POLICY "Admin Bucket Control"
@@ -297,14 +295,14 @@ USING ( public.is_admin() )
 WITH CHECK ( public.is_admin() );
 
 -- OBJECT POLICIES (storage.objects)
--- 1. Allow public to view images in 'menu-items'
+-- 1. Allow public to view images in 'uploads'
 CREATE POLICY "Public Object View"
 ON storage.objects FOR SELECT
-USING ( bucket_id = 'menu-items' );
+USING ( bucket_id = 'uploads' );
 
--- 2. Allow admins full control over images in 'menu-items'
+-- 2. Allow admins full control over images in 'uploads'
 CREATE POLICY "Admin Object Control"
 ON storage.objects FOR ALL
 TO authenticated
-USING ( bucket_id = 'menu-items' AND public.is_admin() )
-WITH CHECK ( bucket_id = 'menu-items' AND public.is_admin() );
+USING ( bucket_id = 'uploads' AND public.is_admin() )
+WITH CHECK ( bucket_id = 'uploads' AND public.is_admin() );
