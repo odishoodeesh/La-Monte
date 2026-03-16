@@ -101,6 +101,12 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (isMediaLibraryOpen) {
+      fetchMedia();
+    }
+  }, [isMediaLibraryOpen]);
+
   const fetchMenu = async () => {
     setMenuLoading(true);
     try {
@@ -162,6 +168,7 @@ export default function App() {
   };
 
   const fetchMedia = async () => {
+    console.log('Fetching media from bucket: uploads...');
     setMediaLoading(true);
     try {
       const { data, error } = await supabase.storage
@@ -172,10 +179,24 @@ export default function App() {
           sortBy: { column: 'name', order: 'asc' },
         });
 
-      if (error) throw error;
-      setMediaFiles(data || []);
+      if (error) {
+        console.error('Supabase list error:', error);
+        throw error;
+      }
+      
+      console.log('Media files found (raw):', data?.length || 0, data);
+      
+      // Filter out Supabase system files and folders
+      const filesOnly = (data || []).filter(file => 
+        file.name !== '.emptyFolderPlaceholder' && 
+        !file.name.startsWith('.')
+      );
+      
+      console.log('Filtered files (images only):', filesOnly.length, filesOnly);
+      setMediaFiles(filesOnly);
     } catch (error: any) {
       console.error('Error fetching media:', error.message);
+      alert('Failed to load media gallery: ' + error.message);
     } finally {
       setMediaLoading(false);
     }
@@ -1114,6 +1135,13 @@ export default function App() {
                         <p className="text-sm text-gray-400">Choose a picture from the uploads folder</p>
                       </div>
                       <div className="flex items-center gap-4">
+                        <button 
+                          onClick={() => fetchMedia()} 
+                          className="p-3 bg-white border border-[#e5e5e0] rounded-2xl text-gray-400 hover:text-[#A65E3E] transition-all"
+                          title="Refresh Gallery"
+                        >
+                          <RefreshCw className={`w-5 h-5 ${mediaLoading ? 'animate-spin' : ''}`} />
+                        </button>
                         <label className="cursor-pointer px-6 py-3 bg-[#A65E3E] text-white rounded-2xl font-bold hover:bg-[#8d4f34] transition-all shadow-lg shadow-[#A65E3E]/20 flex items-center gap-2">
                           <Upload className="w-5 h-5" />
                           Upload New

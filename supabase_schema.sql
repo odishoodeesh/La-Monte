@@ -275,7 +275,7 @@ END $$;
 -- Ensure the bucket exists
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('uploads', 'uploads', true)
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET public = true;
 
 -- Enable RLS on storage tables for granular control
 ALTER TABLE storage.buckets ENABLE ROW LEVEL SECURITY;
