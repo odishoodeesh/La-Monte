@@ -34,6 +34,7 @@ CREATE TABLE public.categories (
   menu_id UUID REFERENCES public.menus(id) ON DELETE CASCADE NOT NULL,
   name TEXT NOT NULL,
   display_order INTEGER DEFAULT 0,
+  is_available BOOLEAN DEFAULT true,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   UNIQUE(menu_id, name)
 );
@@ -44,6 +45,7 @@ CREATE TABLE public.subcategories (
   category_id UUID REFERENCES public.categories(id) ON DELETE CASCADE NOT NULL,
   name TEXT NOT NULL,
   display_order INTEGER DEFAULT 0,
+  is_available BOOLEAN DEFAULT true,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   UNIQUE(category_id, name)
 );

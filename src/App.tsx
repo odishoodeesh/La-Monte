@@ -88,7 +88,7 @@ export default function App() {
     });
 
     fetchMenu();
-    if (session) fetchCategories();
+    fetchCategories();
 
     return () => {
       clearTimeout(timer);
@@ -116,7 +116,6 @@ export default function App() {
             )
           )
         `)
-        .eq('is_available', true)
         .order('name', { ascending: true });
 
       if (data) {
@@ -164,6 +163,10 @@ export default function App() {
   const groupedMenu = menuItems.reduce((acc, item) => {
     const category = item.category || 'Uncategorized';
     const subcategory = item.subcategory || 'General';
+    
+    // Filter for public view
+    if (view === 'menu' && !item.is_available) return acc;
+
     if (!acc[category]) acc[category] = {};
     if (!acc[category][subcategory]) acc[category][subcategory] = [];
     acc[category][subcategory].push(item);
@@ -594,13 +597,26 @@ export default function App() {
             <main className="flex-1 p-8 max-w-7xl mx-auto w-full">
               {adminSubView === 'dashboard' ? (
                 <>
-                  <div className="mb-12">
-                    <h1 className="text-5xl font-bold text-[#A65E3E] mb-4">
-                      Admin Dashboard
-                    </h1>
-                    <p className="text-xl text-gray-500 max-w-2xl">
-                      Manage your menu items and restaurant settings.
-                    </p>
+                  <div className="mb-12 flex items-start justify-between">
+                    <div>
+                      <h1 className="text-5xl font-bold text-[#A65E3E] mb-4">
+                        Admin Dashboard
+                      </h1>
+                      <p className="text-xl text-gray-500 max-w-2xl">
+                        Manage your menu items and restaurant settings.
+                      </p>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        fetchMenu();
+                        fetchCategories();
+                      }}
+                      className="p-4 bg-white border border-[#e5e5e0] rounded-[24px] text-gray-400 hover:text-[#A65E3E] hover:border-[#A65E3E] transition-all shadow-sm flex items-center gap-2 font-bold text-sm uppercase tracking-widest"
+                      title="Refresh Data"
+                    >
+                      <RefreshCw className={`w-5 h-5 ${menuLoading ? 'animate-spin' : ''}`} />
+                      Refresh
+                    </button>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
