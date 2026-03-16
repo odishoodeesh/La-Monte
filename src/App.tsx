@@ -181,25 +181,43 @@ export default function App() {
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleFileUpload = async (e: any) => {
+    const file = e.target?.files?.[0] || e.files?.[0];
+    if (!file) {
+      console.log('No file selected');
+      return null;
+    }
 
+    console.log('Starting upload for:', file.name, 'Size:', file.size);
+    if (file.size > 5 * 1024 * 1024) {
+      alert('File is too large. Max size is 5MB.');
+      return null;
+    }
     setMediaLoading(true);
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
       const filePath = `${fileName}`;
 
-      const { error } = await supabase.storage
+      console.log('Uploading to bucket: uploads, path:', filePath);
+      const { data, error } = await supabase.storage
         .from('uploads')
         .upload(filePath, file);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase storage error:', error);
+        throw error;
+      }
       
-      fetchMedia();
+      console.log('Upload successful:', data);
+      const publicUrl = getPublicUrl(fileName);
+      console.log('Public URL:', publicUrl);
+      await fetchMedia();
+      return publicUrl;
     } catch (error: any) {
-      alert(error.message);
+      console.error('Upload catch error:', error);
+      alert('Upload failed: ' + error.message);
+      return null;
     } finally {
       setMediaLoading(false);
     }
@@ -1290,20 +1308,22 @@ export default function App() {
                               </button>
                             </div>
                             <div className="flex gap-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const input = document.createElement('input');
-                                  input.type = 'file';
-                                  input.accept = 'image/*';
-                                  input.onchange = handleFileUpload;
-                                  input.click();
-                                }}
-                                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-white border border-[#e5e5e0] rounded-xl text-xs font-bold hover:bg-[#f9f9f7] transition-all"
-                              >
-                                <Upload className="w-4 h-4" />
-                                Upload
-                              </button>
+                              <label className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-white border border-[#e5e5e0] rounded-xl text-xs font-bold hover:bg-[#f9f9f7] transition-all cursor-pointer disabled:opacity-50">
+                                {mediaLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                                {mediaLoading ? 'Uploading...' : 'Upload'}
+                                <input
+                                  type="file"
+                                  className="hidden"
+                                  accept="image/*"
+                                  disabled={mediaLoading}
+                                  onChange={async (e) => {
+                                    const url = await handleFileUpload(e);
+                                    if (url && editingItem) {
+                                      setEditingItem(prev => ({ ...prev, image_url: url }));
+                                    }
+                                  }}
+                                />
+                              </label>
                               <button
                                 type="button"
                                 onClick={generateImage}
