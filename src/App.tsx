@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { supabase } from "./lib/supabase";
-import { LogIn, UserPlus, LogOut, Mail, Lock, Loader2, User, ChevronRight, ChevronDown, Plus, Edit2, Trash2, Image as ImageIcon, Sparkles, X, Save, ArrowLeft, RefreshCw, Upload } from "lucide-react";
+import { LogIn, UserPlus, LogOut, Mail, Lock, Loader2, User, ChevronRight, ChevronDown, Plus, Edit2, Trash2, Image as ImageIcon, Sparkles, X, Save, ArrowLeft, RefreshCw, Upload, AlertCircle } from "lucide-react";
 import { GoogleGenAI } from "@google/genai";
 
 interface MenuItem {
@@ -60,6 +60,7 @@ export default function App() {
   const [mediaFiles, setMediaFiles] = useState<any[]>([]);
   const [isMediaLibraryOpen, setIsMediaLibraryOpen] = useState(false);
   const [mediaLoading, setMediaLoading] = useState(false);
+  const [mediaError, setMediaError] = useState<string | null>(null);
 
   useEffect(() => {
     // Expand all categories by default when menuItems are loaded
@@ -163,7 +164,9 @@ export default function App() {
 
   const fetchMedia = async () => {
     setMediaLoading(true);
+    setMediaError(null);
     try {
+      console.log('Fetching media from bucket: uploads');
       const { data, error } = await supabase.storage
         .from('uploads')
         .list('', {
@@ -172,10 +175,19 @@ export default function App() {
           sortBy: { column: 'name', order: 'asc' },
         });
 
-      if (error) throw error;
-      setMediaFiles(data || []);
+      if (error) {
+        console.error('Supabase list error:', error);
+        setMediaError(`Failed to list files: ${error.message}`);
+        throw error;
+      }
+      
+      console.log('Media fetched successfully, count:', data?.length);
+      // Filter out the .emptyFolderPlaceholder if it exists
+      const filteredData = data?.filter(file => file.name !== '.emptyFolderPlaceholder') || [];
+      setMediaFiles(filteredData);
     } catch (error: any) {
       console.error('Error fetching media:', error.message);
+      setMediaError(error.message);
     } finally {
       setMediaLoading(false);
     }
@@ -1131,10 +1143,27 @@ export default function App() {
                           <Loader2 className="w-12 h-12 animate-spin" />
                           <p className="font-bold uppercase tracking-widest text-xs">Loading Media...</p>
                         </div>
+                      ) : mediaError ? (
+                        <div className="h-64 flex flex-col items-center justify-center text-red-400 gap-4">
+                          <AlertCircle className="w-12 h-12" />
+                          <p className="font-bold uppercase tracking-widest text-xs">{mediaError}</p>
+                          <button 
+                            onClick={fetchMedia}
+                            className="px-4 py-2 bg-[#A65E3E] text-white rounded-xl text-xs font-bold hover:bg-[#8d4f34] transition-all"
+                          >
+                            Retry
+                          </button>
+                        </div>
                       ) : mediaFiles.length === 0 ? (
                         <div className="h-64 flex flex-col items-center justify-center text-gray-300 gap-4">
                           <ImageIcon className="w-16 h-16" />
                           <p className="font-bold uppercase tracking-widest text-xs">No pictures in uploads folder</p>
+                          <button 
+                            onClick={fetchMedia}
+                            className="px-4 py-2 bg-[#A65E3E]/10 text-[#A65E3E] rounded-xl text-xs font-bold hover:bg-[#A65E3E]/20 transition-all"
+                          >
+                            Refresh
+                          </button>
                         </div>
                       ) : (
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
