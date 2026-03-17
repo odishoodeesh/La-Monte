@@ -56,7 +56,8 @@ async function startServer() {
       // For Supabase, the public URL is usually: {endpoint}/{bucket}/{key}
       // But the endpoint provided is the S3 one. 
       // Supabase public URL format: https://{project_ref}.supabase.co/storage/v1/object/public/{bucket}/{key}
-      const projectRef = process.env.VITE_SUPABASE_URL?.split("//")[1].split(".")[0];
+      const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://immwdjlbadltxvfaeqfv.supabase.co';
+      const projectRef = supabaseUrl.split("//")[1].split(".")[0];
       const publicUrl = `https://${projectRef}.supabase.co/storage/v1/object/public/${bucketName}/${fileName}`;
 
       res.json({ url: publicUrl });
@@ -89,7 +90,8 @@ async function startServer() {
 
       await s3Client.send(command);
 
-      const projectRef = process.env.VITE_SUPABASE_URL?.split("//")[1].split(".")[0];
+      const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://immwdjlbadltxvfaeqfv.supabase.co';
+      const projectRef = supabaseUrl.split("//")[1].split(".")[0];
       const publicUrl = `https://${projectRef}.supabase.co/storage/v1/object/public/${bucketName}/${fileName}`;
 
       res.json({ url: publicUrl });

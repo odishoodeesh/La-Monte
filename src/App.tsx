@@ -101,12 +101,6 @@ export default function App() {
     };
   }, []);
 
-  useEffect(() => {
-    if (isMediaLibraryOpen) {
-      fetchMedia();
-    }
-  }, [isMediaLibraryOpen]);
-
   const fetchMenu = async () => {
     setMenuLoading(true);
     try {
@@ -168,7 +162,6 @@ export default function App() {
   };
 
   const fetchMedia = async () => {
-    console.log('Fetching media from bucket: uploads...');
     setMediaLoading(true);
     try {
       const { data, error } = await supabase.storage
@@ -179,24 +172,10 @@ export default function App() {
           sortBy: { column: 'name', order: 'asc' },
         });
 
-      if (error) {
-        console.error('Supabase list error:', error);
-        throw error;
-      }
-      
-      console.log('Media files found (raw):', data?.length || 0, data);
-      
-      // Filter out Supabase system files and folders
-      const filesOnly = (data || []).filter(file => 
-        file.name !== '.emptyFolderPlaceholder' && 
-        !file.name.startsWith('.')
-      );
-      
-      console.log('Filtered files (images only):', filesOnly.length, filesOnly);
-      setMediaFiles(filesOnly);
+      if (error) throw error;
+      setMediaFiles(data || []);
     } catch (error: any) {
       console.error('Error fetching media:', error.message);
-      alert('Failed to load media gallery: ' + error.message);
     } finally {
       setMediaLoading(false);
     }
@@ -923,7 +902,7 @@ export default function App() {
                               <div className="flex items-center gap-4">
                                 <div className="w-12 h-12 rounded-xl bg-gray-100 overflow-hidden flex-shrink-0">
                                   {item.image_url ? (
-                                    <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+                                    <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                                   ) : (
                                     <div className="w-full h-full flex items-center justify-center text-gray-300">
                                       <ImageIcon className="w-6 h-6" />
@@ -1135,13 +1114,6 @@ export default function App() {
                         <p className="text-sm text-gray-400">Choose a picture from the uploads folder</p>
                       </div>
                       <div className="flex items-center gap-4">
-                        <button 
-                          onClick={() => fetchMedia()} 
-                          className="p-3 bg-white border border-[#e5e5e0] rounded-2xl text-gray-400 hover:text-[#A65E3E] transition-all"
-                          title="Refresh Gallery"
-                        >
-                          <RefreshCw className={`w-5 h-5 ${mediaLoading ? 'animate-spin' : ''}`} />
-                        </button>
                         <label className="cursor-pointer px-6 py-3 bg-[#A65E3E] text-white rounded-2xl font-bold hover:bg-[#8d4f34] transition-all shadow-lg shadow-[#A65E3E]/20 flex items-center gap-2">
                           <Upload className="w-5 h-5" />
                           Upload New
@@ -1180,7 +1152,7 @@ export default function App() {
                                 }}
                                 className="aspect-square rounded-2xl border border-[#e5e5e0] overflow-hidden cursor-pointer group relative"
                               >
-                                <img src={url} alt={file.name} className="w-full h-full object-cover" />
+                                <img src={url} alt={file.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                                 <div className="absolute inset-0 bg-[#A65E3E]/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
                                   <span className="text-white font-bold text-xs uppercase tracking-widest">Select</span>
                                   <button
@@ -1366,12 +1338,13 @@ export default function App() {
                           <div className="w-full md:w-48 h-48 bg-[#f9f9f7] border border-[#e5e5e0] rounded-[32px] overflow-hidden relative group">
                             {editingItem?.image_url ? (
                               <>
-                                <img src={editingItem.image_url} alt="Preview" className="w-full h-full object-cover" />
+                                <img src={editingItem.image_url} alt="Preview" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                   <img 
                                     src="https://i.ibb.co/84TCyPNf/logo.png" 
                                     alt="Logo Overlay" 
                                     className="w-12 h-12 object-contain opacity-80"
+                                    referrerPolicy="no-referrer"
                                   />
                                 </div>
                               </>
@@ -1541,8 +1514,18 @@ export default function App() {
                                           initial={{ opacity: 0, scale: 0.95 }}
                                           animate={{ opacity: 1, scale: 1 }}
                                           onClick={() => setSelectedItem(item)}
-                                          className="bg-white p-5 rounded-2xl border border-[#e5e5e0] shadow-sm flex justify-between items-center group hover:border-[#A65E3E]/30 transition-all cursor-pointer"
+                                          className="bg-white p-5 rounded-2xl border border-[#e5e5e0] shadow-sm flex gap-4 items-center group hover:border-[#A65E3E]/30 transition-all cursor-pointer"
                                         >
+                                          {item.image_url && (
+                                            <div className="w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 border border-[#e5e5e0]">
+                                              <img 
+                                                src={item.image_url} 
+                                                alt={item.name} 
+                                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                                                referrerPolicy="no-referrer"
+                                              />
+                                            </div>
+                                          )}
                                           <div className="flex-1">
                                             <h3 className="text-lg font-bold text-[#1a1a1a] group-hover:text-[#A65E3E] transition-colors">
                                               {item.name}
