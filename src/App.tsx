@@ -6,7 +6,32 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { supabase } from "./lib/supabase";
-import { LogIn, UserPlus, LogOut, Mail, Lock, Loader2, User, ChevronRight, ChevronDown, Plus, Edit2, Trash2, Image as ImageIcon, Sparkles, X, Save, ArrowLeft, RefreshCw, Upload, AlertCircle } from "lucide-react";
+import { 
+  LogIn, 
+  UserPlus, 
+  LogOut, 
+  Mail, 
+  Lock, 
+  Loader2, 
+  User, 
+  ChevronRight, 
+  ChevronDown, 
+  Plus, 
+  Edit2, 
+  Trash2, 
+  Image as ImageIcon, 
+  Sparkles, 
+  X, 
+  Save, 
+  ArrowLeft, 
+  RefreshCw, 
+  Upload, 
+  AlertCircle,
+  Coffee,
+  Layers,
+  Grid,
+  BarChart3
+} from "lucide-react";
 import { GoogleGenAI } from "@google/genai";
 
 interface MenuItem {
@@ -61,6 +86,24 @@ export default function App() {
   const [isMediaLibraryOpen, setIsMediaLibraryOpen] = useState(false);
   const [mediaLoading, setMediaLoading] = useState(false);
   const [mediaError, setMediaError] = useState<string | null>(null);
+  const [showHeader, setShowHeader] = useState(true);
+  const [lastScrollY, setLastScrollY] = useState(0);
+
+  useEffect(() => {
+    const controlNavbar = () => {
+      if (typeof window !== 'undefined') {
+        if (window.scrollY > lastScrollY && window.scrollY > 100) {
+          setShowHeader(false);
+        } else {
+          setShowHeader(true);
+        }
+        setLastScrollY(window.scrollY);
+      }
+    };
+
+    window.addEventListener('scroll', controlNavbar);
+    return () => window.removeEventListener('scroll', controlNavbar);
+  }, [lastScrollY]);
 
   useEffect(() => {
     // Expand all categories by default when menuItems are loaded
@@ -510,20 +553,26 @@ export default function App() {
 
   if (showIntro) {
     return (
-      <div className="min-h-screen bg-[#f5f5f0] flex items-center justify-center overflow-hidden">
+      <div className="min-h-screen bg-bg flex items-center justify-center overflow-hidden">
         <motion.div
           key="intro"
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 1.1 }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
           className="flex flex-col items-center"
         >
           <img
             src="https://i.ibb.co/84TCyPNf/logo.png"
             alt="Lamonte Logo"
-            className="max-w-[80vw] h-auto"
+            className="max-w-[60vw] md:max-w-[400px] h-auto transition-all duration-1000"
             referrerPolicy="no-referrer"
+          />
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5 }}
+            className="mt-8 h-px w-12 bg-primary/30"
           />
         </motion.div>
       </div>
@@ -531,130 +580,125 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f5f5f0] text-[#1a1a1a] font-serif">
+    <div className="min-h-screen bg-bg text-ink font-sans">
       <AnimatePresence mode="wait">
         {view === 'auth' ? (
           <motion.div
             key="auth"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="min-h-screen flex items-center justify-center p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="min-h-screen flex items-center justify-center p-4 bg-bg"
           >
-            <div className="w-full max-w-md bg-white rounded-[32px] shadow-xl p-8 border border-[#e5e5e0]">
-              <button 
-                onClick={() => setView('menu')}
-                className="mb-6 text-sm text-gray-400 hover:text-[#A65E3E] flex items-center gap-1 transition-colors"
-              >
-                <ChevronRight className="rotate-180 w-4 h-4" />
-                Back to Menu
-              </button>
-              <div className="text-center mb-8">
+            <div className="w-full max-w-md space-y-12">
+              <div className="text-center space-y-6">
                 <img
                   src="https://i.ibb.co/84TCyPNf/logo.png"
                   alt="Lamonte Logo"
-                  className="h-16 mx-auto mb-4"
+                  className="h-12 mx-auto"
                   referrerPolicy="no-referrer"
                 />
-                <h2 className="text-3xl font-bold text-[#A65E3E]">
-                  Admin Access
-                </h2>
-                <p className="text-sm text-gray-500 mt-2">
-                  Sign in to manage Lamonte
-                </p>
+                <div className="space-y-2">
+                  <h2 className="text-4xl font-serif text-ink italic">
+                    Admin Access
+                  </h2>
+                  <p className="text-sm text-gray-400 tracking-widest uppercase font-light">
+                    Management Portal
+                  </p>
+                </div>
               </div>
 
-              <form onSubmit={handleAuth} className="space-y-6">
-                <div>
-                  <label className="block text-xs uppercase tracking-widest font-bold text-gray-400 mb-2 ml-1">
-                    Email Address
-                  </label>
-                  <div className="relative">
-                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <form onSubmit={handleAuth} className="space-y-8">
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <label className="block text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400 ml-1">
+                      Identity
+                    </label>
                     <input
                       type="email"
                       required
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="w-full pl-12 pr-4 py-4 bg-[#f9f9f7] border border-[#e5e5e0] rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#A65E3E]/20 focus:border-[#A65E3E] transition-all"
-                      placeholder="admin@lamonte.com"
+                      className="w-full px-0 py-4 bg-transparent border-b border-line focus:outline-none focus:border-primary transition-all text-lg font-light"
+                      placeholder="Email Address"
                     />
                   </div>
-                </div>
 
-                <div>
-                  <label className="block text-xs uppercase tracking-widest font-bold text-gray-400 mb-2 ml-1">
-                    Password
-                  </label>
-                  <div className="relative">
-                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <div className="space-y-2">
+                    <label className="block text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400 ml-1">
+                      Security
+                    </label>
                     <input
                       type="password"
                       required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full pl-12 pr-4 py-4 bg-[#f9f9f7] border border-[#e5e5e0] rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#A65E3E]/20 focus:border-[#A65E3E] transition-all"
-                      placeholder="••••••••"
+                      className="w-full px-0 py-4 bg-transparent border-b border-line focus:outline-none focus:border-primary transition-all text-lg font-light"
+                      placeholder="Password"
                     />
                   </div>
                 </div>
 
                 {authError && (
-                  <div className="p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-sm">
+                  <div className="text-red-500 text-xs text-center italic">
                     {authError}
                   </div>
                 )}
 
-                <button
-                  type="submit"
-                  disabled={authLoading}
-                  className="w-full py-4 bg-[#A65E3E] hover:bg-[#8d4f34] text-white rounded-2xl font-bold shadow-lg shadow-[#A65E3E]/20 transition-all flex items-center justify-center gap-2 disabled:opacity-70"
-                >
-                  {authLoading ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <>
-                      <LogIn className="w-5 h-5" />
-                      Sign In
-                    </>
-                  )}
-                </button>
+                <div className="space-y-4 pt-4">
+                  <button
+                    type="submit"
+                    disabled={authLoading}
+                    className="w-full py-4 bg-ink text-white hover:bg-primary transition-all duration-500 text-sm uppercase tracking-[0.3em] font-bold disabled:opacity-50"
+                  >
+                    {authLoading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Enter'}
+                  </button>
+                  
+                  <div className="relative py-4">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-line"></div>
+                    </div>
+                    <div className="relative flex justify-center text-[10px] uppercase tracking-widest">
+                      <span className="bg-bg px-4 text-gray-400 font-bold">Or</span>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleGoogleSignIn}
+                    disabled={authLoading}
+                    type="button"
+                    className="w-full py-4 bg-white border border-line hover:bg-bg text-ink text-[10px] uppercase tracking-[0.3em] font-bold transition-all flex items-center justify-center gap-3 disabled:opacity-70"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24">
+                      <path
+                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                        fill="#4285F4"
+                      />
+                      <path
+                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                        fill="#34A853"
+                      />
+                      <path
+                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"
+                        fill="#FBBC05"
+                      />
+                      <path
+                        d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                        fill="#EA4335"
+                      />
+                    </svg>
+                    Google
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setView('menu')}
+                    className="w-full py-4 text-gray-400 hover:text-ink transition-all text-[10px] uppercase tracking-[0.3em] font-bold"
+                  >
+                    Return to Menu
+                  </button>
+                </div>
               </form>
-
-              <div className="relative my-8">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-[#e5e5e0]"></div>
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-white px-4 text-gray-400 tracking-widest font-bold">Or continue with</span>
-                </div>
-              </div>
-
-              <button
-                onClick={handleGoogleSignIn}
-                disabled={authLoading}
-                className="w-full py-4 bg-white border border-[#e5e5e0] hover:bg-[#f9f9f7] text-[#1a1a1a] rounded-2xl font-bold transition-all flex items-center justify-center gap-3 disabled:opacity-70"
-              >
-                <svg className="w-5 h-5" viewBox="0 0 24 24">
-                  <path
-                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                    fill="#4285F4"
-                  />
-                  <path
-                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                    fill="#34A853"
-                  />
-                  <path
-                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"
-                    fill="#FBBC05"
-                  />
-                  <path
-                    d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                    fill="#EA4335"
-                  />
-                </svg>
-                Google
-              </button>
             </div>
           </motion.div>
         ) : view === 'admin' && session ? (
@@ -664,49 +708,50 @@ export default function App() {
             animate={{ opacity: 1 }}
             className="min-h-screen flex flex-col"
           >
-            <nav className="bg-white border-b border-[#e5e5e0] px-6 py-4 flex items-center justify-between">
-              <div className="flex items-center gap-4">
+            <motion.nav 
+              animate={{ y: showHeader ? 0 : -100 }}
+              transition={{ duration: 0.3, ease: "easeInOut" }}
+              className="bg-white border-b border-line px-8 py-6 flex items-center justify-between sticky top-0 z-50"
+            >
+              <div className="flex items-center gap-8">
                 <img
                   src="https://i.ibb.co/84TCyPNf/logo.png"
                   alt="Lamonte Logo"
-                  className="h-10"
+                  className="h-8"
                   referrerPolicy="no-referrer"
                 />
-                <span className="text-xs uppercase tracking-widest font-bold text-[#A65E3E] bg-[#A65E3E]/10 px-3 py-1 rounded-full">
-                  Admin Panel
+                <div className="h-4 w-px bg-line hidden md:block" />
+                <span className="text-[10px] uppercase tracking-[0.3em] font-bold text-primary hidden md:block">
+                  Studio
                 </span>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-8">
                 <button 
                   onClick={() => setView('menu')}
-                  className="text-sm text-gray-500 hover:text-[#A65E3E] transition-colors"
+                  className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400 hover:text-ink transition-colors"
                 >
-                  View Public Menu
+                  Public View
                 </button>
-                <div className="flex items-center gap-2 px-4 py-2 bg-[#f9f9f7] rounded-full text-sm text-gray-600">
-                  <User className="w-4 h-4" />
-                  {session.user.user_metadata?.full_name || session.user.email}
-                </div>
+                <div className="h-4 w-px bg-line" />
                 <button
                   onClick={handleSignOut}
-                  className="p-2 text-gray-400 hover:text-red-500 transition-colors"
-                  title="Sign Out"
+                  className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400 hover:text-red-500 transition-colors"
                 >
-                  <LogOut className="w-6 h-6" />
+                  Logout
                 </button>
               </div>
-            </nav>
+            </motion.nav>
 
-            <main className="flex-1 p-8 max-w-7xl mx-auto w-full">
+            <main className="flex-1 p-8 md:p-16 max-w-7xl mx-auto w-full">
               {adminSubView === 'dashboard' ? (
-                <>
-                  <div className="mb-12 flex items-start justify-between">
-                    <div>
-                      <h1 className="text-5xl font-bold text-[#A65E3E] mb-4">
-                        Admin Dashboard
+                <div className="space-y-24">
+                  <div className="flex flex-col md:flex-row md:items-end justify-between gap-8">
+                    <div className="space-y-4">
+                      <h1 className="text-6xl font-serif text-ink italic leading-tight">
+                        Dashboard
                       </h1>
-                      <p className="text-xl text-gray-500 max-w-2xl">
-                        Manage your menu items and restaurant settings.
+                      <p className="text-gray-400 font-light tracking-wide max-w-md">
+                        Refining the Lamonte experience through intentional management.
                       </p>
                     </div>
                     <button 
@@ -714,91 +759,94 @@ export default function App() {
                         fetchMenu();
                         fetchCategories();
                       }}
-                      className="p-4 bg-white border border-[#e5e5e0] rounded-[24px] text-gray-400 hover:text-[#A65E3E] hover:border-[#A65E3E] transition-all shadow-sm flex items-center gap-2 font-bold text-sm uppercase tracking-widest"
-                      title="Refresh Data"
+                      className="flex items-center gap-3 text-[10px] uppercase tracking-[0.3em] font-bold text-gray-400 hover:text-primary transition-all"
                     >
-                      <RefreshCw className={`w-5 h-5 ${menuLoading ? 'animate-spin' : ''}`} />
-                      Refresh
+                      <RefreshCw className={`w-4 h-4 ${menuLoading ? 'animate-spin' : ''}`} />
+                      Sync Data
                     </button>
                   </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                        {[
-                          { title: "Manage Menu", desc: "Add, edit, or remove menu items.", icon: "🍔", view: 'menu' },
-                          { title: "Categories", desc: "Manage top-level menu sections.", icon: "📂", view: 'categories' },
-                          { title: "Subcategories", desc: "Manage nested menu groups.", icon: "📁", view: 'subcategories' },
-                          { title: "Media Library", desc: "Manage your uploaded pictures.", icon: "🖼️", action: () => setIsMediaLibraryOpen(true) },
-                          { title: "Analytics", desc: "Track your restaurant's performance.", icon: "📈", view: 'dashboard' }
-                        ].map((item, i) => (
-                          <motion.div
-                            key={i}
-                            whileHover={{ y: -5 }}
-                            onClick={() => {
-                              if ('action' in item) {
-                                item.action();
-                              } else if (item.view !== 'dashboard') {
-                                setAdminSubView(item.view as any);
-                              }
-                            }}
-                            className="bg-white p-8 rounded-[32px] border border-[#e5e5e0] shadow-sm hover:shadow-md transition-all cursor-pointer"
-                          >
-                        <div className="text-4xl mb-4">{item.icon}</div>
-                        <h3 className="text-2xl font-bold mb-2">{item.title}</h3>
-                        <p className="text-gray-500">{item.desc}</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-px bg-line border border-line overflow-hidden rounded-sm">
+                    {[
+                      { title: "Menu Items", desc: "Curate your offerings.", icon: <Coffee className="w-5 h-5" />, view: 'menu' },
+                      { title: "Categories", desc: "Define the structure.", icon: <Layers className="w-5 h-5" />, view: 'categories' },
+                      { title: "Subcategories", desc: "Nested organization.", icon: <Grid className="w-5 h-5" />, view: 'subcategories' },
+                      { title: "Media Library", desc: "Visual assets.", icon: <ImageIcon className="w-5 h-5" />, action: () => setIsMediaLibraryOpen(true) },
+                      { title: "Analytics", desc: "Performance insights.", icon: <BarChart3 className="w-5 h-5" />, view: 'dashboard' }
+                    ].map((item, i) => (
+                      <motion.div
+                        key={i}
+                        whileHover={{ backgroundColor: "var(--color-bg)" }}
+                        onClick={() => {
+                          if ('action' in item) {
+                            item.action();
+                          } else if (item.view !== 'dashboard') {
+                            setAdminSubView(item.view as any);
+                          }
+                        }}
+                        className="bg-white p-12 space-y-6 cursor-pointer transition-colors group"
+                      >
+                        <div className="text-gray-300 group-hover:text-primary transition-colors">
+                          {item.icon}
+                        </div>
+                        <div className="space-y-2">
+                          <h3 className="text-2xl font-serif italic text-ink">{item.title}</h3>
+                          <p className="text-xs text-gray-400 font-light tracking-wide">{item.desc}</p>
+                        </div>
                       </motion.div>
                     ))}
                   </div>
-                </>
+                </div>
               ) : adminSubView === 'categories' ? (
-                <div className="space-y-8">
+                <div className="space-y-12">
                   <div className="flex items-center justify-between">
                     <button 
                       onClick={() => setAdminSubView('dashboard')}
-                      className="flex items-center gap-2 text-gray-400 hover:text-[#A65E3E] transition-colors"
+                      className="flex items-center gap-3 text-gray-400 hover:text-ink transition-colors group"
                     >
-                      <ArrowLeft className="w-5 h-5" />
-                      Back to Dashboard
+                      <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                      <span className="text-[10px] uppercase tracking-[0.4em] font-bold">Return</span>
                     </button>
                     <button
                       onClick={() => {
                         setEditingCategory({ name: '' });
                         setIsCategoryModalOpen(true);
                       }}
-                      className="flex items-center gap-2 px-6 py-3 bg-[#A65E3E] text-white rounded-2xl font-bold hover:bg-[#8d4f34] transition-all shadow-lg shadow-[#A65E3E]/20"
+                      className="px-8 py-4 bg-ink text-white text-[10px] uppercase tracking-[0.4em] font-bold hover:bg-primary transition-all flex items-center gap-3"
                     >
-                      <Plus className="w-5 h-5" />
-                      Add Category
+                      <Plus className="w-4 h-4" />
+                      New Collection
                     </button>
                   </div>
 
-                  <div className="bg-white rounded-[32px] border border-[#e5e5e0] overflow-hidden">
+                  <div className="bg-white border border-line overflow-hidden">
                     <table className="w-full text-left">
-                      <thead className="bg-[#f9f9f7] border-b border-[#e5e5e0]">
+                      <thead className="bg-bg/50 border-b border-line">
                         <tr>
-                          <th className="px-6 py-4 text-xs uppercase tracking-widest font-bold text-gray-400">Category Name</th>
-                          <th className="px-6 py-4 text-xs uppercase tracking-widest font-bold text-gray-400 text-right">Actions</th>
+                          <th className="px-8 py-6 text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400">Collection Nomenclature</th>
+                          <th className="px-8 py-6 text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400 text-right">Actions</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-[#e5e5e0]">
+                      <tbody className="divide-y divide-line">
                         {categories.map((cat) => (
-                          <tr key={cat.id} className="hover:bg-[#f9f9f7] transition-colors">
-                            <td className="px-6 py-4 font-bold text-[#1a1a1a]">{cat.name}</td>
-                            <td className="px-6 py-4 text-right">
-                              <div className="flex items-center justify-end gap-2">
+                          <tr key={cat.id} className="hover:bg-bg/30 transition-colors group">
+                            <td className="px-8 py-6 font-serif italic text-xl text-ink">{cat.name}</td>
+                            <td className="px-8 py-6 text-right">
+                              <div className="flex items-center justify-end gap-6">
                                 <button
                                   onClick={() => {
                                     setEditingCategory(cat);
                                     setIsCategoryModalOpen(true);
                                   }}
-                                  className="p-2 text-gray-400 hover:text-[#A65E3E] transition-colors"
+                                  className="text-gray-300 hover:text-primary transition-colors"
                                 >
-                                  <Edit2 className="w-5 h-5" />
+                                  <Edit2 className="w-4 h-4" />
                                 </button>
                                 <button
                                   onClick={() => handleDeleteCategory(cat.id)}
-                                  className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                                  className="text-gray-300 hover:text-red-400 transition-colors"
                                 >
-                                  <Trash2 className="w-5 h-5" />
+                                  <Trash2 className="w-4 h-4" />
                                 </button>
                               </div>
                             </td>
@@ -809,61 +857,61 @@ export default function App() {
                   </div>
                 </div>
               ) : adminSubView === 'subcategories' ? (
-                <div className="space-y-8">
+                <div className="space-y-12">
                   <div className="flex items-center justify-between">
                     <button 
                       onClick={() => setAdminSubView('dashboard')}
-                      className="flex items-center gap-2 text-gray-400 hover:text-[#A65E3E] transition-colors"
+                      className="flex items-center gap-3 text-gray-400 hover:text-ink transition-colors group"
                     >
-                      <ArrowLeft className="w-5 h-5" />
-                      Back to Dashboard
+                      <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                      <span className="text-[10px] uppercase tracking-[0.4em] font-bold">Return</span>
                     </button>
                     <button
                       onClick={() => {
                         setEditingSubcategory({ name: '', category_id: categories[0]?.id });
                         setIsSubcategoryModalOpen(true);
                       }}
-                      className="flex items-center gap-2 px-6 py-3 bg-[#A65E3E] text-white rounded-2xl font-bold hover:bg-[#8d4f34] transition-all shadow-lg shadow-[#A65E3E]/20"
+                      className="px-8 py-4 bg-ink text-white text-[10px] uppercase tracking-[0.4em] font-bold hover:bg-primary transition-all flex items-center gap-3"
                     >
-                      <Plus className="w-5 h-5" />
-                      Add Subcategory
+                      <Plus className="w-4 h-4" />
+                      New Classification
                     </button>
                   </div>
 
-                  <div className="bg-white rounded-[32px] border border-[#e5e5e0] overflow-hidden">
+                  <div className="bg-white border border-line overflow-hidden">
                     <table className="w-full text-left">
-                      <thead className="bg-[#f9f9f7] border-b border-[#e5e5e0]">
+                      <thead className="bg-bg/50 border-b border-line">
                         <tr>
-                          <th className="px-6 py-4 text-xs uppercase tracking-widest font-bold text-gray-400">Subcategory Name</th>
-                          <th className="px-6 py-4 text-xs uppercase tracking-widest font-bold text-gray-400">Parent Category</th>
-                          <th className="px-6 py-4 text-xs uppercase tracking-widest font-bold text-gray-400 text-right">Actions</th>
+                          <th className="px-8 py-6 text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400">Classification</th>
+                          <th className="px-8 py-6 text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400">Parent Collection</th>
+                          <th className="px-8 py-6 text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400 text-right">Actions</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-[#e5e5e0]">
+                      <tbody className="divide-y divide-line">
                         {subcategories.map((sub) => (
-                          <tr key={sub.id} className="hover:bg-[#f9f9f7] transition-colors">
-                            <td className="px-6 py-4 font-bold text-[#1a1a1a]">{sub.name}</td>
-                            <td className="px-6 py-4">
-                              <span className="text-xs font-bold uppercase tracking-tighter text-[#A65E3E] bg-[#A65E3E]/10 px-2 py-1 rounded-md">
+                          <tr key={sub.id} className="hover:bg-bg/30 transition-colors group">
+                            <td className="px-8 py-6 font-serif italic text-xl text-ink">{sub.name}</td>
+                            <td className="px-8 py-6">
+                              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary">
                                 {categories.find(c => c.id === sub.category_id)?.name}
                               </span>
                             </td>
-                            <td className="px-6 py-4 text-right">
-                              <div className="flex items-center justify-end gap-2">
+                            <td className="px-8 py-6 text-right">
+                              <div className="flex items-center justify-end gap-6">
                                 <button
                                   onClick={() => {
                                     setEditingSubcategory(sub);
                                     setIsSubcategoryModalOpen(true);
                                   }}
-                                  className="p-2 text-gray-400 hover:text-[#A65E3E] transition-colors"
+                                  className="text-gray-300 hover:text-primary transition-colors"
                                 >
-                                  <Edit2 className="w-5 h-5" />
+                                  <Edit2 className="w-4 h-4" />
                                 </button>
                                 <button
                                   onClick={() => handleDeleteSubcategory(sub.id)}
-                                  className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                                  className="text-gray-300 hover:text-red-400 transition-colors"
                                 >
-                                  <Trash2 className="w-5 h-5" />
+                                  <Trash2 className="w-4 h-4" />
                                 </button>
                               </div>
                             </td>
@@ -874,84 +922,84 @@ export default function App() {
                   </div>
                 </div>
               ) : (
-                <div className="space-y-8">
+                <div className="space-y-12">
                   <div className="flex items-center justify-between">
                     <button 
                       onClick={() => setAdminSubView('dashboard')}
-                      className="flex items-center gap-2 text-gray-400 hover:text-[#A65E3E] transition-colors"
+                      className="flex items-center gap-3 text-gray-400 hover:text-ink transition-colors group"
                     >
-                      <ArrowLeft className="w-5 h-5" />
-                      Back to Dashboard
+                      <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                      <span className="text-[10px] uppercase tracking-[0.4em] font-bold">Return</span>
                     </button>
-                    <div className="flex items-center gap-4">
-                      <button
-                        onClick={() => {
-                          setEditingItem({ name: '', description: '', price: 0, category: '', subcategory: '', subcategory_id: '', image_url: '' });
-                          setIsModalOpen(true);
-                        }}
-                        className="flex items-center gap-2 px-6 py-3 bg-[#A65E3E] text-white rounded-2xl font-bold hover:bg-[#8d4f34] transition-all shadow-lg shadow-[#A65E3E]/20"
-                      >
-                        <Plus className="w-5 h-5" />
-                        Add New Item
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => {
+                        setEditingItem({ name: '', description: '', price: 0, category: '', subcategory: '', subcategory_id: '', image_url: '' });
+                        setIsModalOpen(true);
+                      }}
+                      className="px-8 py-4 bg-ink text-white text-[10px] uppercase tracking-[0.4em] font-bold hover:bg-primary transition-all flex items-center gap-3"
+                    >
+                      <Plus className="w-4 h-4" />
+                      New Creation
+                    </button>
                   </div>
 
-                  <div className="bg-white rounded-[32px] border border-[#e5e5e0] overflow-hidden">
+                  <div className="bg-white border border-line overflow-hidden">
                     <table className="w-full text-left">
-                      <thead className="bg-[#f9f9f7] border-b border-[#e5e5e0]">
+                      <thead className="bg-bg/50 border-b border-line">
                         <tr>
-                          <th className="px-6 py-4 text-xs uppercase tracking-widest font-bold text-gray-400">Item</th>
-                          <th className="px-6 py-4 text-xs uppercase tracking-widest font-bold text-gray-400">Category</th>
-                          <th className="px-6 py-4 text-xs uppercase tracking-widest font-bold text-gray-400">Price</th>
-                          <th className="px-6 py-4 text-xs uppercase tracking-widest font-bold text-gray-400 text-right">Actions</th>
+                          <th className="px-8 py-6 text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400">Item</th>
+                          <th className="px-8 py-6 text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400">Collection</th>
+                          <th className="px-8 py-6 text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400">Valuation</th>
+                          <th className="px-8 py-6 text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400 text-right">Actions</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-[#e5e5e0]">
+                      <tbody className="divide-y divide-line">
                         {menuItems.map((item) => (
-                          <tr key={item.id} className="hover:bg-[#f9f9f7] transition-colors">
-                            <td className="px-6 py-4">
-                              <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 rounded-xl bg-gray-100 overflow-hidden flex-shrink-0">
+                          <tr key={item.id} className="hover:bg-bg/30 transition-colors group">
+                            <td className="px-8 py-6">
+                              <div className="flex items-center gap-6">
+                                <div className="w-16 h-16 bg-bg border border-line rounded-xl overflow-hidden flex-shrink-0">
                                   {item.image_url ? (
-                                    <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                    <img src={item.image_url} alt={item.name} className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500" referrerPolicy="no-referrer" />
                                   ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-gray-300">
+                                    <div className="w-full h-full flex items-center justify-center text-gray-200">
                                       <ImageIcon className="w-6 h-6" />
                                     </div>
                                   )}
                                 </div>
                                 <div>
-                                  <div className="font-bold text-[#1a1a1a]">{item.name}</div>
-                                  <div className="text-xs text-gray-400 line-clamp-1">{item.description}</div>
+                                  <div className="font-serif italic text-xl text-ink">{item.name}</div>
+                                  <div className="text-[10px] text-gray-400 uppercase tracking-widest line-clamp-1 mt-1">{item.description}</div>
                                 </div>
                               </div>
                             </td>
-                            <td className="px-6 py-4">
-                              <span className="text-xs font-bold uppercase tracking-tighter text-[#A65E3E] bg-[#A65E3E]/10 px-2 py-1 rounded-md">
-                                {item.category}
-                              </span>
-                              <span className="ml-2 text-xs text-gray-400">{item.subcategory}</span>
+                            <td className="px-8 py-6">
+                              <div className="flex flex-col gap-1">
+                                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary">
+                                  {item.category}
+                                </span>
+                                <span className="text-[10px] text-gray-400 uppercase tracking-widest">{item.subcategory}</span>
+                              </div>
                             </td>
-                            <td className="px-6 py-4 font-bold text-[#1a1a1a]">
-                              {item.price.toLocaleString()} <span className="text-[10px] text-gray-400">IQD</span>
+                            <td className="px-8 py-6 font-serif italic text-lg text-ink">
+                              {item.price.toLocaleString()} <span className="text-[10px] text-gray-400 uppercase tracking-widest not-italic ml-1">IQD</span>
                             </td>
-                            <td className="px-6 py-4 text-right">
-                              <div className="flex items-center justify-end gap-2">
+                            <td className="px-8 py-6 text-right">
+                              <div className="flex items-center justify-end gap-6">
                                 <button
                                   onClick={() => {
                                     setEditingItem(item);
                                     setIsModalOpen(true);
                                   }}
-                                  className="p-2 text-gray-400 hover:text-[#A65E3E] transition-colors"
+                                  className="text-gray-300 hover:text-primary transition-colors"
                                 >
-                                  <Edit2 className="w-5 h-5" />
+                                  <Edit2 className="w-4 h-4" />
                                 </button>
                                 <button
                                   onClick={() => handleDeleteItem(item.id)}
-                                  className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                                  className="text-gray-300 hover:text-red-400 transition-colors"
                                 >
-                                  <Trash2 className="w-5 h-5" />
+                                  <Trash2 className="w-4 h-4" />
                                 </button>
                               </div>
                             </td>
@@ -981,43 +1029,43 @@ export default function App() {
                     exit={{ opacity: 0, scale: 0.9, y: 20 }}
                     className="relative w-full max-w-md bg-white rounded-[40px] shadow-2xl overflow-hidden"
                   >
-                    <div className="p-8 border-b border-[#e5e5e0] flex items-center justify-between">
-                      <h2 className="text-3xl font-bold text-[#A65E3E]">
-                        {editingCategory?.id ? 'Edit Category' : 'New Category'}
+                    <div className="p-12 border-b border-line flex items-center justify-between bg-bg">
+                      <h2 className="text-4xl font-serif italic text-ink lowercase">
+                        {editingCategory?.id ? 'Refine Collection' : 'New Collection'}
                       </h2>
-                      <button onClick={() => setIsCategoryModalOpen(false)} className="p-2 text-gray-400 hover:text-[#1a1a1a]">
+                      <button onClick={() => setIsCategoryModalOpen(false)} className="p-2 text-gray-400 hover:text-ink transition-colors">
                         <X className="w-6 h-6" />
                       </button>
                     </div>
 
-                    <form onSubmit={handleSaveCategory} className="p-8 space-y-6">
-                      <div className="space-y-2">
-                        <label className="text-xs uppercase tracking-widest font-bold text-gray-400 ml-1">Category Name</label>
+                    <form onSubmit={handleSaveCategory} className="p-12 space-y-12 bg-bg">
+                      <div className="space-y-4">
+                        <label className="text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400 ml-1">Collection Nomenclature</label>
                         <input
                           type="text"
                           required
                           value={editingCategory?.name || ''}
                           onChange={(e) => setEditingCategory(prev => ({ ...prev, name: e.target.value }))}
-                          className="w-full px-4 py-3 bg-[#f9f9f7] border border-[#e5e5e0] rounded-2xl focus:ring-2 focus:ring-[#A65E3E]/20 focus:border-[#A65E3E] outline-none transition-all"
+                          className="w-full px-0 py-3 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-serif italic text-xl text-ink placeholder:text-gray-200"
                           placeholder="e.g. Drinks, Food, etc."
                         />
                       </div>
 
-                      <div className="pt-4 flex gap-4">
+                      <div className="pt-8 flex gap-6">
                         <button
                           type="button"
                           onClick={() => setIsCategoryModalOpen(false)}
-                          className="flex-1 py-4 bg-[#f9f9f7] text-gray-500 rounded-2xl font-bold hover:bg-[#f0f0ed] transition-all"
+                          className="flex-1 py-5 border border-line text-ink text-[10px] uppercase tracking-[0.4em] font-bold hover:border-primary hover:text-primary transition-all"
                         >
-                          Cancel
+                          Discard
                         </button>
                         <button
                           type="submit"
                           disabled={authLoading}
-                          className="flex-1 py-4 bg-[#A65E3E] text-white rounded-2xl font-bold hover:bg-[#8d4f34] transition-all shadow-lg shadow-[#A65E3E]/20 flex items-center justify-center gap-2 disabled:opacity-70"
+                          className="flex-1 py-5 bg-ink text-white text-[10px] uppercase tracking-[0.4em] font-bold hover:bg-primary transition-all flex items-center justify-center gap-3 disabled:opacity-70"
                         >
                           {authLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-                          Save Category
+                          Commit
                         </button>
                       </div>
                     </form>
@@ -1043,58 +1091,58 @@ export default function App() {
                     exit={{ opacity: 0, scale: 0.9, y: 20 }}
                     className="relative w-full max-w-md bg-white rounded-[40px] shadow-2xl overflow-hidden"
                   >
-                    <div className="p-8 border-b border-[#e5e5e0] flex items-center justify-between">
-                      <h2 className="text-3xl font-bold text-[#A65E3E]">
-                        {editingSubcategory?.id ? 'Edit Subcategory' : 'New Subcategory'}
+                    <div className="p-12 border-b border-line flex items-center justify-between bg-bg">
+                      <h2 className="text-4xl font-serif italic text-ink lowercase">
+                        {editingSubcategory?.id ? 'Refine Classification' : 'New Classification'}
                       </h2>
-                      <button onClick={() => setIsSubcategoryModalOpen(false)} className="p-2 text-gray-400 hover:text-[#1a1a1a]">
+                      <button onClick={() => setIsSubcategoryModalOpen(false)} className="p-2 text-gray-400 hover:text-ink transition-colors">
                         <X className="w-6 h-6" />
                       </button>
                     </div>
 
-                    <form onSubmit={handleSaveSubcategory} className="p-8 space-y-6">
-                      <div className="space-y-2">
-                        <label className="text-xs uppercase tracking-widest font-bold text-gray-400 ml-1">Parent Category</label>
+                    <form onSubmit={handleSaveSubcategory} className="p-12 space-y-12 bg-bg">
+                      <div className="space-y-4">
+                        <label className="text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400 ml-1">Parent Collection</label>
                         <select
                           required
                           value={editingSubcategory?.category_id || ''}
                           onChange={(e) => setEditingSubcategory(prev => ({ ...prev, category_id: e.target.value }))}
-                          className="w-full px-4 py-3 bg-[#f9f9f7] border border-[#e5e5e0] rounded-2xl focus:ring-2 focus:ring-[#A65E3E]/20 focus:border-[#A65E3E] outline-none transition-all"
+                          className="w-full px-0 py-3 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-serif italic text-xl text-ink appearance-none cursor-pointer"
                         >
-                          <option value="" disabled>Select Category</option>
+                          <option value="" disabled>Select Collection</option>
                           {categories.map(cat => (
                             <option key={cat.id} value={cat.id}>{cat.name}</option>
                           ))}
                         </select>
                       </div>
 
-                      <div className="space-y-2">
-                        <label className="text-xs uppercase tracking-widest font-bold text-gray-400 ml-1">Subcategory Name</label>
+                      <div className="space-y-4">
+                        <label className="text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400 ml-1">Classification Nomenclature</label>
                         <input
                           type="text"
                           required
                           value={editingSubcategory?.name || ''}
                           onChange={(e) => setEditingSubcategory(prev => ({ ...prev, name: e.target.value }))}
-                          className="w-full px-4 py-3 bg-[#f9f9f7] border border-[#e5e5e0] rounded-2xl focus:ring-2 focus:ring-[#A65E3E]/20 focus:border-[#A65E3E] outline-none transition-all"
+                          className="w-full px-0 py-3 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-serif italic text-xl text-ink placeholder:text-gray-200"
                           placeholder="e.g. Hot Drinks, Pasta, etc."
                         />
                       </div>
 
-                      <div className="pt-4 flex gap-4">
+                      <div className="pt-8 flex gap-6">
                         <button
                           type="button"
                           onClick={() => setIsSubcategoryModalOpen(false)}
-                          className="flex-1 py-4 bg-[#f9f9f7] text-gray-500 rounded-2xl font-bold hover:bg-[#f0f0ed] transition-all"
+                          className="flex-1 py-5 border border-line text-ink text-[10px] uppercase tracking-[0.4em] font-bold hover:border-primary hover:text-primary transition-all"
                         >
-                          Cancel
+                          Discard
                         </button>
                         <button
                           type="submit"
                           disabled={authLoading}
-                          className="flex-1 py-4 bg-[#A65E3E] text-white rounded-2xl font-bold hover:bg-[#8d4f34] transition-all shadow-lg shadow-[#A65E3E]/20 flex items-center justify-center gap-2 disabled:opacity-70"
+                          className="flex-1 py-5 bg-ink text-white text-[10px] uppercase tracking-[0.4em] font-bold hover:bg-primary transition-all flex items-center justify-center gap-3 disabled:opacity-70"
                         >
                           {authLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-                          Save Subcategory
+                          Commit
                         </button>
                       </div>
                     </form>
@@ -1120,73 +1168,73 @@ export default function App() {
                     exit={{ opacity: 0, scale: 0.9, y: 20 }}
                     className="relative w-full max-w-4xl bg-white rounded-[40px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
                   >
-                    <div className="p-8 border-b border-[#e5e5e0] flex items-center justify-between bg-[#f9f9f7]">
+                    <div className="p-12 border-b border-line flex items-center justify-between bg-bg/50 backdrop-blur-sm">
                       <div>
-                        <h2 className="text-3xl font-bold text-[#A65E3E]">Media Library</h2>
-                        <p className="text-sm text-gray-400">Choose a picture from the uploads folder</p>
+                        <h2 className="text-4xl font-serif italic text-ink lowercase">Media Library</h2>
+                        <p className="text-[10px] uppercase tracking-[0.2em] text-gray-400 mt-2">Curate your visual selection</p>
                       </div>
-                      <div className="flex items-center gap-4">
-                        <label className="cursor-pointer px-6 py-3 bg-[#A65E3E] text-white rounded-2xl font-bold hover:bg-[#8d4f34] transition-all shadow-lg shadow-[#A65E3E]/20 flex items-center gap-2">
-                          <Upload className="w-5 h-5" />
-                          Upload New
+                      <div className="flex items-center gap-6">
+                        <label className="cursor-pointer px-8 py-4 bg-ink text-white text-[10px] uppercase tracking-[0.4em] font-bold hover:bg-primary transition-all flex items-center gap-3">
+                          <Upload className="w-4 h-4" />
+                          Upload
                           <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} />
                         </label>
-                        <button onClick={() => setIsMediaLibraryOpen(false)} className="p-2 text-gray-400 hover:text-[#1a1a1a]">
+                        <button onClick={() => setIsMediaLibraryOpen(false)} className="p-2 text-gray-400 hover:text-ink transition-colors">
                           <X className="w-6 h-6" />
                         </button>
                       </div>
                     </div>
 
-                    <div className="flex-1 p-8 overflow-y-auto custom-scrollbar">
+                    <div className="flex-1 p-12 overflow-y-auto custom-scrollbar bg-bg">
                       {mediaLoading ? (
-                        <div className="h-64 flex flex-col items-center justify-center text-gray-400 gap-4">
-                          <Loader2 className="w-12 h-12 animate-spin" />
-                          <p className="font-bold uppercase tracking-widest text-xs">Loading Media...</p>
+                        <div className="h-64 flex flex-col items-center justify-center text-gray-300 gap-6">
+                          <div className="w-12 h-px bg-line animate-pulse" />
+                          <p className="text-[10px] uppercase tracking-[0.4em] font-bold">Scanning Archives</p>
                         </div>
                       ) : mediaError ? (
-                        <div className="h-64 flex flex-col items-center justify-center text-red-400 gap-4">
-                          <AlertCircle className="w-12 h-12" />
-                          <p className="font-bold uppercase tracking-widest text-xs">{mediaError}</p>
+                        <div className="h-64 flex flex-col items-center justify-center text-red-400 gap-6">
+                          <AlertCircle className="w-12 h-12 opacity-50" />
+                          <p className="text-[10px] uppercase tracking-[0.4em] font-bold">{mediaError}</p>
                           <button 
                             onClick={fetchMedia}
-                            className="px-4 py-2 bg-[#A65E3E] text-white rounded-xl text-xs font-bold hover:bg-[#8d4f34] transition-all"
+                            className="px-8 py-4 bg-ink text-white text-[10px] uppercase tracking-[0.4em] font-bold hover:bg-primary transition-all"
                           >
                             Retry
                           </button>
                         </div>
                       ) : mediaFiles.length === 0 ? (
-                        <div className="h-64 flex flex-col items-center justify-center text-gray-300 gap-4">
-                          <ImageIcon className="w-16 h-16" />
-                          <p className="font-bold uppercase tracking-widest text-xs">No pictures in uploads folder</p>
+                        <div className="h-64 flex flex-col items-center justify-center text-gray-300 gap-6">
+                          <ImageIcon className="w-16 h-16 opacity-20" />
+                          <p className="text-[10px] uppercase tracking-[0.4em] font-bold">No visuals found</p>
                           <button 
                             onClick={fetchMedia}
-                            className="px-4 py-2 bg-[#A65E3E]/10 text-[#A65E3E] rounded-xl text-xs font-bold hover:bg-[#A65E3E]/20 transition-all"
+                            className="px-8 py-4 border border-line text-ink text-[10px] uppercase tracking-[0.4em] font-bold hover:border-primary hover:text-primary transition-all"
                           >
                             Refresh
                           </button>
                         </div>
                       ) : (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
                           {mediaFiles.map((file, i) => {
                             const url = getPublicUrl(file.name);
                             return (
                               <motion.div
                                 key={i}
-                                whileHover={{ scale: 1.05 }}
+                                whileHover={{ scale: 1.02 }}
                                 onClick={() => {
                                   if (editingItem) {
                                     setEditingItem(prev => ({ ...prev, image_url: url }));
                                   }
                                   setIsMediaLibraryOpen(false);
                                 }}
-                                className="aspect-square rounded-2xl border border-[#e5e5e0] overflow-hidden cursor-pointer group relative"
+                                className="aspect-square bg-white border border-line rounded-xl overflow-hidden cursor-pointer group relative"
                               >
-                                <img src={url} alt={file.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                                <div className="absolute inset-0 bg-[#A65E3E]/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
-                                  <span className="text-white font-bold text-xs uppercase tracking-widest">Select</span>
+                                <img src={url} alt={file.name} className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700" referrerPolicy="no-referrer" />
+                                <div className="absolute inset-0 bg-ink/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-4">
+                                  <span className="text-white text-[10px] uppercase tracking-[0.4em] font-bold">Select</span>
                                   <button
                                     onClick={(e) => handleDeleteMedia(file.name, e)}
-                                    className="p-2 bg-white/20 hover:bg-red-500 rounded-full text-white transition-all"
+                                    className="p-3 bg-white/10 hover:bg-red-500/80 rounded-full text-white transition-all backdrop-blur-sm"
                                     title="Delete Image"
                                   >
                                     <Trash2 className="w-4 h-4" />
@@ -1220,44 +1268,44 @@ export default function App() {
                     exit={{ opacity: 0, scale: 0.9, y: 20 }}
                     className="relative w-full max-w-2xl bg-white rounded-[40px] shadow-2xl overflow-hidden"
                   >
-                    <div className="p-8 border-b border-[#e5e5e0] flex items-center justify-between">
-                      <h2 className="text-3xl font-bold text-[#A65E3E]">
-                        {editingItem?.id ? 'Edit Item' : 'New Menu Item'}
+                    <div className="p-12 border-b border-line flex items-center justify-between bg-bg">
+                      <h2 className="text-4xl font-serif italic text-ink lowercase">
+                        {editingItem?.id ? 'Refine Item' : 'New Creation'}
                       </h2>
-                      <button onClick={() => setIsModalOpen(false)} className="p-2 text-gray-400 hover:text-[#1a1a1a]">
+                      <button onClick={() => setIsModalOpen(false)} className="p-2 text-gray-400 hover:text-ink transition-colors">
                         <X className="w-6 h-6" />
                       </button>
                     </div>
 
-                    <form onSubmit={handleSaveItem} className="p-8 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="space-y-2">
-                          <label className="text-xs uppercase tracking-widest font-bold text-gray-400 ml-1">Item Name</label>
+                    <form onSubmit={handleSaveItem} className="p-12 space-y-12 max-h-[70vh] overflow-y-auto custom-scrollbar bg-bg">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                        <div className="space-y-4">
+                          <label className="text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400 ml-1">Nomenclature</label>
                           <input
                             type="text"
                             required
                             value={editingItem?.name || ''}
                             onChange={(e) => setEditingItem(prev => ({ ...prev, name: e.target.value }))}
-                            className="w-full px-4 py-3 bg-[#f9f9f7] border border-[#e5e5e0] rounded-2xl focus:ring-2 focus:ring-[#A65E3E]/20 focus:border-[#A65E3E] outline-none transition-all"
+                            className="w-full px-0 py-3 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-serif italic text-xl text-ink placeholder:text-gray-200"
                             placeholder="e.g. Spanish Latte"
                           />
                         </div>
-                        <div className="space-y-2">
-                          <label className="text-xs uppercase tracking-widest font-bold text-gray-400 ml-1">Price (IQD)</label>
+                        <div className="space-y-4">
+                          <label className="text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400 ml-1">Valuation (IQD)</label>
                           <input
                             type="number"
                             required
                             value={editingItem?.price || 0}
                             onChange={(e) => setEditingItem(prev => ({ ...prev, price: parseInt(e.target.value) }))}
-                            className="w-full px-4 py-3 bg-[#f9f9f7] border border-[#e5e5e0] rounded-2xl focus:ring-2 focus:ring-[#A65E3E]/20 focus:border-[#A65E3E] outline-none transition-all"
+                            className="w-full px-0 py-3 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-serif italic text-xl text-ink placeholder:text-gray-200"
                             placeholder="7000"
                           />
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="space-y-2">
-                          <label className="text-xs uppercase tracking-widest font-bold text-gray-400 ml-1">Category</label>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                        <div className="space-y-4">
+                          <label className="text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400 ml-1">Collection</label>
                           <select
                             value={categories.find(c => c.name === editingItem?.category)?.id || ''}
                             onChange={(e) => {
@@ -1271,16 +1319,16 @@ export default function App() {
                                 subcategory_id: firstSub?.id || ''
                               }));
                             }}
-                            className="w-full px-4 py-3 bg-[#f9f9f7] border border-[#e5e5e0] rounded-2xl focus:ring-2 focus:ring-[#A65E3E]/20 focus:border-[#A65E3E] outline-none transition-all"
+                            className="w-full px-0 py-3 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-serif italic text-xl text-ink appearance-none cursor-pointer"
                           >
-                            <option value="" disabled>Select Category</option>
+                            <option value="" disabled>Select Collection</option>
                             {categories.map(cat => (
                               <option key={cat.id} value={cat.id}>{cat.name}</option>
                             ))}
                           </select>
                         </div>
-                        <div className="space-y-2">
-                          <label className="text-xs uppercase tracking-widest font-bold text-gray-400 ml-1">Subcategory</label>
+                        <div className="space-y-4">
+                          <label className="text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400 ml-1">Classification</label>
                           <select
                             value={editingItem?.subcategory_id || ''}
                             onChange={(e) => {
@@ -1292,9 +1340,9 @@ export default function App() {
                                 subcategory_id: subId 
                               }));
                             }}
-                            className="w-full px-4 py-3 bg-[#f9f9f7] border border-[#e5e5e0] rounded-2xl focus:ring-2 focus:ring-[#A65E3E]/20 focus:border-[#A65E3E] outline-none transition-all"
+                            className="w-full px-0 py-3 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-serif italic text-xl text-ink appearance-none cursor-pointer"
                           >
-                            <option value="" disabled>Select Subcategory</option>
+                            <option value="" disabled>Select Classification</option>
                             {subcategories
                               .filter(sub => sub.category_id === categories.find(c => c.name === editingItem?.category)?.id)
                               .map(sub => (
@@ -1305,41 +1353,41 @@ export default function App() {
                         </div>
                       </div>
 
-                      <div className="space-y-2">
-                        <label className="text-xs uppercase tracking-widest font-bold text-gray-400 ml-1">Description</label>
+                      <div className="space-y-4">
+                        <label className="text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400 ml-1">Narrative</label>
                         <textarea
                           value={editingItem?.description || ''}
                           onChange={(e) => setEditingItem(prev => ({ ...prev, description: e.target.value }))}
-                          className="w-full px-4 py-3 bg-[#f9f9f7] border border-[#e5e5e0] rounded-2xl focus:ring-2 focus:ring-[#A65E3E]/20 focus:border-[#A65E3E] outline-none transition-all h-24 resize-none"
-                          placeholder="Describe your item..."
+                          className="w-full px-0 py-3 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-serif italic text-xl text-ink h-24 resize-none placeholder:text-gray-200"
+                          placeholder="Describe the essence..."
                         />
                       </div>
 
-                      <div className="space-y-4">
-                        <label className="text-xs uppercase tracking-widest font-bold text-gray-400 ml-1">Item Image</label>
-                        <div className="flex flex-col md:flex-row gap-4">
-                          <div className="flex-1 space-y-2">
-                            <div className="flex gap-2">
+                      <div className="space-y-8">
+                        <label className="text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400 ml-1">Visual Representation</label>
+                        <div className="flex flex-col md:flex-row gap-12">
+                          <div className="flex-1 space-y-8">
+                            <div className="flex gap-4">
                               <input
                                 type="text"
                                 value={editingItem?.image_url || ''}
                                 onChange={(e) => setEditingItem(prev => ({ ...prev, image_url: e.target.value }))}
-                                className="flex-1 px-4 py-3 bg-[#f9f9f7] border border-[#e5e5e0] rounded-2xl focus:ring-2 focus:ring-[#A65E3E]/20 focus:border-[#A65E3E] outline-none transition-all"
-                                placeholder="Image URL"
+                                className="flex-1 px-0 py-3 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-serif italic text-lg text-ink placeholder:text-gray-200"
+                                placeholder="Visual URL"
                               />
                               <button
                                 type="button"
                                 onClick={() => setIsMediaLibraryOpen(true)}
-                                className="px-4 py-3 bg-white border border-[#e5e5e0] rounded-2xl text-[#A65E3E] hover:bg-[#A65E3E] hover:text-white transition-all flex items-center gap-2 font-bold text-xs"
+                                className="px-6 py-3 border border-line text-ink text-[10px] uppercase tracking-[0.4em] font-bold hover:border-primary hover:text-primary transition-all flex items-center gap-3"
                               >
                                 <ImageIcon className="w-4 h-4" />
                                 Library
                               </button>
                             </div>
-                            <div className="flex gap-2">
-                              <label className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-white border border-[#e5e5e0] rounded-xl text-xs font-bold hover:bg-[#f9f9f7] transition-all cursor-pointer disabled:opacity-50">
+                            <div className="flex gap-4">
+                              <label className="flex-1 flex items-center justify-center gap-3 px-6 py-4 border border-line text-ink text-[10px] uppercase tracking-[0.4em] font-bold hover:border-primary hover:text-primary transition-all cursor-pointer disabled:opacity-50">
                                 {mediaLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                                {mediaLoading ? 'Uploading...' : 'Upload'}
+                                {mediaLoading ? 'Uploading' : 'Upload'}
                                 <input
                                   type="file"
                                   className="hidden"
@@ -1357,51 +1405,51 @@ export default function App() {
                                 type="button"
                                 onClick={generateImage}
                                 disabled={isGenerating}
-                                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-[#A65E3E]/10 text-[#A65E3E] rounded-xl text-xs font-bold hover:bg-[#A65E3E]/20 transition-all disabled:opacity-50"
+                                className="flex-1 flex items-center justify-center gap-3 px-6 py-4 bg-ink text-white text-[10px] uppercase tracking-[0.4em] font-bold hover:bg-primary transition-all disabled:opacity-50"
                               >
                                 {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                                Generate AI
+                                AI Vision
                               </button>
                             </div>
                           </div>
-                          <div className="w-full md:w-48 h-48 bg-[#f9f9f7] border border-[#e5e5e0] rounded-[32px] overflow-hidden relative group">
+                          <div className="w-full md:w-48 h-48 bg-white border border-line rounded-2xl overflow-hidden relative group">
                             {editingItem?.image_url ? (
                               <>
-                                <img src={editingItem.image_url} alt="Preview" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                <img src={editingItem.image_url} alt="Preview" className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700" referrerPolicy="no-referrer" />
+                                <div className="absolute inset-0 bg-ink/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                   <img 
                                     src="https://i.ibb.co/84TCyPNf/logo.png" 
                                     alt="Logo Overlay" 
-                                    className="w-12 h-12 object-contain opacity-80"
+                                    className="w-12 h-12 object-contain opacity-50"
                                     referrerPolicy="no-referrer"
                                   />
                                 </div>
                               </>
                             ) : (
-                              <div className="w-full h-full flex flex-col items-center justify-center text-gray-300 gap-2">
-                                <ImageIcon className="w-8 h-8" />
-                                <span className="text-[10px] font-bold uppercase tracking-widest">Preview</span>
+                              <div className="w-full h-full flex flex-col items-center justify-center text-gray-200 gap-4">
+                                <ImageIcon className="w-12 h-12" />
+                                <span className="text-[10px] font-bold uppercase tracking-[0.4em]">Visual</span>
                               </div>
                             )}
                           </div>
                         </div>
                       </div>
 
-                      <div className="pt-4 flex gap-4">
+                      <div className="pt-8 flex gap-6">
                         <button
                           type="button"
                           onClick={() => setIsModalOpen(false)}
-                          className="flex-1 py-4 bg-[#f9f9f7] text-gray-500 rounded-2xl font-bold hover:bg-[#f0f0ed] transition-all"
+                          className="flex-1 py-5 border border-line text-ink text-[10px] uppercase tracking-[0.4em] font-bold hover:border-primary hover:text-primary transition-all"
                         >
-                          Cancel
+                          Discard
                         </button>
                         <button
                           type="submit"
                           disabled={authLoading}
-                          className="flex-1 py-4 bg-[#A65E3E] text-white rounded-2xl font-bold hover:bg-[#8d4f34] transition-all shadow-lg shadow-[#A65E3E]/20 flex items-center justify-center gap-2 disabled:opacity-70"
+                          className="flex-1 py-5 bg-ink text-white text-[10px] uppercase tracking-[0.4em] font-bold hover:bg-primary transition-all flex items-center justify-center gap-3 disabled:opacity-70"
                         >
                           {authLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-                          Save Item
+                          Commit Changes
                         </button>
                       </div>
                     </form>
@@ -1415,90 +1463,87 @@ export default function App() {
             key="menu"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="min-h-screen flex flex-col"
+            className="min-h-screen flex flex-col bg-bg"
           >
-            <header className="py-12 flex flex-col items-center bg-white border-b border-[#e5e5e0] sticky top-0 z-50">
+            <motion.header 
+              animate={{ y: showHeader ? 0 : -200 }}
+              transition={{ duration: 0.3, ease: "easeInOut" }}
+              className="py-4 flex flex-col items-center bg-white border-b border-line sticky top-0 z-50"
+            >
               <img
                 src="https://i.ibb.co/84TCyPNf/logo.png"
                 alt="Lamonte Logo"
-                className="h-20 mb-6"
+                className="h-8 mb-4"
                 referrerPolicy="no-referrer"
               />
               
-              <div className="flex gap-4 px-4 overflow-x-auto no-scrollbar w-full max-w-md justify-center">
+              <div className="flex gap-6 px-8 overflow-x-auto no-scrollbar w-full max-w-2xl justify-center">
                 {[
-                  { id: 'DRINKS', icon: '☕' },
-                  { id: 'SHISHA', icon: '💨' },
-                  { id: 'FOOD', icon: '🍰' }
+                  { id: 'DRINKS', label: 'Beverages' },
+                  { id: 'SHISHA', label: 'Shisha' },
+                  { id: 'FOOD', label: 'Cuisine' }
                 ].map((cat) => (
                   <button
                     key={cat.id}
                     onClick={() => {
                       const element = document.getElementById(`category-${cat.id}`);
                       if (element) {
-                        const offset = 180; // Header height
+                        const offset = 200;
                         const bodyRect = document.body.getBoundingClientRect().top;
                         const elementRect = element.getBoundingClientRect().top;
                         const elementPosition = elementRect - bodyRect;
                         const offsetPosition = elementPosition - offset;
-
-                        window.scrollTo({
-                          top: offsetPosition,
-                          behavior: 'smooth'
-                        });
+                        window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
                       }
                     }}
-                    className="flex flex-col items-center gap-1 px-6 py-3 rounded-2xl bg-[#f9f9f7] text-gray-400 hover:bg-[#f0f0ed] hover:text-[#A65E3E] transition-all min-w-[90px]"
+                    className="group flex flex-col items-center gap-3 transition-all"
                   >
-                    <span className="text-2xl">{cat.icon}</span>
-                    <span className="text-[10px] uppercase tracking-widest font-bold">{cat.id}</span>
+                    <span className="text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400 group-hover:text-primary transition-colors">
+                      {cat.label}
+                    </span>
+                    <div className="h-px w-0 group-hover:w-full bg-primary transition-all duration-500" />
                   </button>
                 ))}
               </div>
-            </header>
+            </motion.header>
 
-            <main className="flex-1 p-8 max-w-7xl mx-auto w-full">
+            <main className="flex-1 p-8 md:p-16 max-w-7xl mx-auto w-full">
               {menuLoading ? (
-                <div className="flex flex-col items-center justify-center py-24 gap-4">
-                  <Loader2 className="w-12 h-12 text-[#A65E3E] animate-spin" />
-                  <p className="text-gray-400 font-medium animate-pulse">Loading menu...</p>
+                <div className="flex flex-col items-center justify-center py-32 gap-6">
+                  <div className="w-12 h-px bg-line animate-pulse" />
+                  <p className="text-[10px] uppercase tracking-[0.4em] text-gray-300 font-bold">Refining Menu</p>
                 </div>
               ) : menuItems.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-24 gap-6 text-center">
-                  <div className="w-24 h-24 bg-[#f9f9f7] rounded-full flex items-center justify-center text-4xl">🍽️</div>
-                  <div className="space-y-2">
-                    <h3 className="text-2xl font-bold text-[#1a1a1a]">No Menu Items Yet</h3>
-                    <p className="text-gray-400 max-w-xs">Our kitchen is preparing something special. Please check back later!</p>
-                  </div>
+                <div className="flex flex-col items-center justify-center py-32 gap-8 text-center">
+                  <h3 className="text-4xl font-serif italic text-ink">Coming Soon</h3>
+                  <p className="text-gray-400 font-light tracking-wide max-w-xs">Our artisans are curating the perfect selection for you.</p>
                 </div>
               ) : (
-                <div className="space-y-24">
+                <div className="space-y-40">
                   {displayCategories.map(categoryName => {
-                    // Find the actual key in groupedMenu (case-insensitive)
                     const actualKey = allCategories.find(k => k.toLowerCase() === categoryName.toLowerCase()) || categoryName;
                     const subcategories = groupedMenu[actualKey];
                     if (!subcategories) return null;
                     
                     return (
-                      <div key={actualKey} id={`category-${actualKey}`} className="space-y-8 scroll-mt-48">
-                        <div className="flex flex-col items-center gap-6">
-                          <div className="flex items-center gap-4 w-full">
-                            <div className="h-px flex-1 bg-[#e5e5e0]"></div>
-                            <h2 className="text-3xl font-bold text-[#A65E3E] uppercase tracking-[0.2em]">
+                      <div key={actualKey} id={`category-${actualKey}`} className="space-y-16 scroll-mt-48">
+                        <div className="flex flex-col items-center gap-8">
+                          <div className="flex items-center gap-12 w-full">
+                            <div className="h-px flex-1 bg-line"></div>
+                            <h2 className="text-5xl font-serif italic text-ink lowercase tracking-tight">
                               {actualKey}
                             </h2>
-                            <div className="h-px flex-1 bg-[#e5e5e0]"></div>
+                            <div className="h-px flex-1 bg-line"></div>
                           </div>
                           
-                          {/* Subcategory Quick Links */}
-                          <div className="flex gap-2 overflow-x-auto no-scrollbar w-full pb-2">
+                          <div className="flex gap-8 overflow-x-auto no-scrollbar w-full justify-center pb-4">
                             {Object.keys(subcategories).map(sub => (
                               <button
                                 key={sub}
                                 onClick={() => {
                                   const element = document.getElementById(`subcategory-${actualKey}-${sub}`);
                                   if (element) {
-                                    const offset = 220; // Header + Subnav height
+                                    const offset = 240;
                                     const bodyRect = document.body.getBoundingClientRect().top;
                                     const elementRect = element.getBoundingClientRect().top;
                                     const elementPosition = elementRect - bodyRect;
@@ -1506,7 +1551,7 @@ export default function App() {
                                     window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
                                   }
                                 }}
-                                className="px-4 py-2 rounded-full bg-white border border-[#e5e5e0] text-[10px] font-bold uppercase tracking-wider text-gray-500 whitespace-nowrap hover:border-[#A65E3E] hover:text-[#A65E3E] transition-all"
+                                className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400 hover:text-primary transition-colors whitespace-nowrap"
                               >
                                 {sub}
                               </button>
@@ -1514,67 +1559,59 @@ export default function App() {
                           </div>
                         </div>
                         
-                        <div className="grid grid-cols-1 gap-8">
+                        <div className="space-y-24">
                           {Object.entries(subcategories).map(([subcategory, items]) => (
-                            <div key={subcategory} id={`subcategory-${actualKey}-${subcategory}`} className="space-y-4 scroll-mt-60">
-                              <button 
-                                onClick={() => toggleCategory(`${actualKey}-${subcategory}`)}
-                                className="flex items-center justify-between w-full p-4 bg-white rounded-2xl border border-[#e5e5e0] text-xl font-semibold text-[#1a1a1a] hover:border-[#A65E3E] transition-all"
-                              >
-                                <span className="flex items-center gap-3">
-                                  <span className="w-1.5 h-6 bg-[#A65E3E] rounded-full"></span>
-                                  {subcategory}
-                                </span>
-                                {expandedCategories[`${actualKey}-${subcategory}`] ? <ChevronDown className="text-[#A65E3E]" /> : <ChevronRight className="text-gray-300" />}
-                              </button>
+                            <div key={subcategory} id={`subcategory-${actualKey}-${subcategory}`} className="space-y-12 scroll-mt-60">
+                              <div className="flex items-center gap-6">
+                                <h3 className="text-2xl font-serif italic text-ink">{subcategory}</h3>
+                                <div className="h-px flex-1 bg-line opacity-50" />
+                              </div>
                               
-                              <AnimatePresence>
-                                {expandedCategories[`${actualKey}-${subcategory}`] && (
-                                  <motion.div 
-                                    initial={{ height: 0, opacity: 0 }}
-                                    animate={{ height: 'auto', opacity: 1 }}
-                                    exit={{ height: 0, opacity: 0 }}
-                                    className="overflow-hidden"
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-12">
+                                {(items as MenuItem[]).map((item) => (
+                                  <motion.div
+                                    key={item.id}
+                                    initial={{ opacity: 0 }}
+                                    whileInView={{ opacity: 1 }}
+                                    viewport={{ once: true }}
+                                    onClick={() => setSelectedItem(item)}
+                                    className="group cursor-pointer flex items-center gap-6"
                                   >
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
-                                      {(items as MenuItem[]).map((item) => (
-                                        <motion.div
-                                          key={item.id}
-                                          initial={{ opacity: 0, scale: 0.95 }}
-                                          animate={{ opacity: 1, scale: 1 }}
-                                          onClick={() => setSelectedItem(item)}
-                                          className="bg-white p-5 rounded-2xl border border-[#e5e5e0] shadow-sm flex gap-4 items-center group hover:border-[#A65E3E]/30 transition-all cursor-pointer"
-                                        >
-                                          {item.image_url && (
-                                            <div className="w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 border border-[#e5e5e0]">
-                                              <img 
-                                                src={item.image_url} 
-                                                alt={item.name} 
-                                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                                                referrerPolicy="no-referrer"
-                                              />
-                                            </div>
-                                          )}
-                                          <div className="flex-1">
-                                            <h3 className="text-lg font-bold text-[#1a1a1a] group-hover:text-[#A65E3E] transition-colors">
-                                              {item.name}
-                                            </h3>
-                                            {item.description && (
-                                              <p className="text-gray-400 text-xs mt-1 line-clamp-2">{item.description}</p>
-                                            )}
-                                          </div>
-                                          <div className="ml-4 text-right">
-                                            <div className="text-[#A65E3E] font-bold text-lg">
-                                              {item.price.toLocaleString()}
-                                            </div>
-                                            <div className="text-[10px] text-gray-300 font-bold uppercase tracking-tighter">IQD</div>
-                                          </div>
-                                        </motion.div>
-                                      ))}
+                                    <div className="w-24 h-24 flex-shrink-0 overflow-hidden bg-white border border-line rounded-2xl relative">
+                                      {item.image_url ? (
+                                        <img 
+                                          src={item.image_url} 
+                                          alt={item.name} 
+                                          className="w-full h-full object-cover grayscale group-hover:grayscale-0 group-hover:scale-105 transition-all duration-700"
+                                          referrerPolicy="no-referrer"
+                                        />
+                                      ) : (
+                                        <div className="w-full h-full flex items-center justify-center text-gray-100">
+                                          <ImageIcon className="w-8 h-8" />
+                                        </div>
+                                      )}
+                                      <div className="absolute inset-0 bg-ink/0 group-hover:bg-ink/5 transition-colors duration-500" />
+                                    </div>
+                                    
+                                    <div className="flex-1 space-y-2">
+                                      <div className="flex justify-between items-baseline gap-4">
+                                        <h4 className="text-xl font-serif italic text-ink group-hover:text-primary transition-colors">
+                                          {item.name}
+                                        </h4>
+                                        <div className="h-px flex-1 bg-line border-dotted border-b opacity-30" />
+                                        <span className="text-sm font-light tracking-widest text-ink">
+                                          {item.price.toLocaleString()}
+                                        </span>
+                                      </div>
+                                      {item.description && (
+                                        <p className="text-xs text-gray-400 font-light leading-relaxed line-clamp-2 italic">
+                                          {item.description}
+                                        </p>
+                                      )}
                                     </div>
                                   </motion.div>
-                                )}
-                              </AnimatePresence>
+                                ))}
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -1585,15 +1622,27 @@ export default function App() {
               )}
             </main>
 
-            <footer className="mt-24 pb-12 flex flex-col items-center border-t border-[#e5e5e0] pt-12">
-              <p className="text-gray-400 text-sm mb-8">© 2026 Lamonte Restaurant & Cafe. All rights reserved.</p>
-              <button
-                onClick={() => setView('auth')}
-                className="flex items-center gap-2 px-6 py-3 bg-white border border-[#e5e5e0] rounded-full text-xs uppercase tracking-widest font-bold text-gray-400 hover:text-[#A65E3E] hover:border-[#A65E3E] transition-all"
-              >
-                <Lock className="w-4 h-4" />
-                Admin Panel
-              </button>
+            <footer className="mt-40 pb-24 flex flex-col items-center border-t border-line pt-24 space-y-12">
+              <div className="flex flex-col items-center space-y-4">
+                <img
+                  src="https://i.ibb.co/84TCyPNf/logo.png"
+                  alt="Lamonte Logo"
+                  className="h-8 opacity-50"
+                  referrerPolicy="no-referrer"
+                />
+                <p className="text-gray-300 text-[10px] uppercase tracking-[0.4em] font-bold">Lamonte Cafe & Lounge</p>
+              </div>
+              
+              <div className="flex items-center gap-8">
+                <button
+                  onClick={() => setView('auth')}
+                  className="text-[10px] uppercase tracking-[0.3em] font-bold text-gray-300 hover:text-ink transition-colors"
+                >
+                  Admin
+                </button>
+                <div className="h-1 w-1 bg-line rounded-full" />
+                <span className="text-[10px] uppercase tracking-[0.3em] font-bold text-gray-300">© 2026</span>
+              </div>
             </footer>
           </motion.div>
         )}
@@ -1608,76 +1657,73 @@ export default function App() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setSelectedItem(null)}
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              className="absolute inset-0 bg-ink/80 backdrop-blur-md"
             />
             <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative w-full max-w-lg bg-white rounded-[32px] shadow-2xl overflow-hidden border border-[#e5e5e0]"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              className="relative w-full max-w-4xl bg-white shadow-2xl overflow-hidden flex flex-col md:flex-row"
             >
               <button 
                 onClick={() => setSelectedItem(null)}
-                className="absolute top-4 right-4 z-10 p-2 bg-white/80 backdrop-blur-md rounded-full text-gray-500 hover:text-[#1a1a1a] transition-all shadow-sm"
+                className="absolute top-6 right-6 z-10 p-2 text-ink hover:text-primary transition-colors"
               >
-                <X className="w-5 h-5" />
+                <X className="w-6 h-6" />
               </button>
 
-              <div className="aspect-square w-full bg-[#f9f9f7] relative">
+              <div className="w-full md:w-1/2 aspect-square md:aspect-auto bg-bg relative">
                 {selectedItem.image_url ? (
                   <img 
                     src={selectedItem.image_url} 
                     alt={selectedItem.name} 
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-1000"
                     referrerPolicy="no-referrer"
                   />
                 ) : (
                   <div className="w-full h-full flex flex-col items-center justify-center text-gray-200 gap-4">
-                    <ImageIcon className="w-16 h-16" />
-                    <span className="text-xs font-bold uppercase tracking-[0.3em]">No Image</span>
+                    <ImageIcon className="w-12 h-12" />
                   </div>
                 )}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent pointer-events-none" />
               </div>
 
-              <div className="p-8 space-y-6">
-                <div className="flex justify-between items-start gap-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-[#A65E3E] bg-[#A65E3E]/10 px-2 py-1 rounded-md">
+              <div className="w-full md:w-1/2 p-12 md:p-16 flex flex-col justify-center space-y-12">
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-4">
+                      <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-primary">
                         {selectedItem.category}
                       </span>
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                      <div className="h-px w-8 bg-line" />
+                      <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-gray-300">
                         {selectedItem.subcategory}
                       </span>
                     </div>
-                    <h2 className="text-3xl font-bold text-[#1a1a1a] leading-tight">
+                    <h2 className="text-5xl font-serif italic text-ink leading-tight">
                       {selectedItem.name}
                     </h2>
                   </div>
-                  <div className="text-right">
-                    <div className="text-3xl font-bold text-[#A65E3E]">
-                      {selectedItem.price.toLocaleString()}
-                    </div>
-                    <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">IQD</div>
-                  </div>
-                </div>
-
-                {selectedItem.description && (
-                  <div className="space-y-2">
-                    <h4 className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Description</h4>
-                    <p className="text-gray-600 leading-relaxed">
+                  
+                  {selectedItem.description && (
+                    <p className="text-gray-400 font-light leading-relaxed italic">
                       {selectedItem.description}
                     </p>
-                  </div>
-                )}
+                  )}
+                </div>
 
-                <button
-                  onClick={() => setSelectedItem(null)}
-                  className="w-full py-4 bg-[#A65E3E] text-white rounded-2xl font-bold hover:bg-[#8d4f34] transition-all shadow-lg shadow-[#A65E3E]/20"
-                >
-                  Close
-                </button>
+                <div className="space-y-8">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-4xl font-light text-ink">{selectedItem.price.toLocaleString()}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-300">IQD</span>
+                  </div>
+
+                  <button
+                    onClick={() => setSelectedItem(null)}
+                    className="w-full py-5 bg-ink text-white text-[10px] uppercase tracking-[0.4em] font-bold hover:bg-primary transition-all duration-500"
+                  >
+                    Return to Menu
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>
