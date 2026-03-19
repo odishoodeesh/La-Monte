@@ -56,6 +56,7 @@ CREATE TABLE public.items (
   description TEXT,
   price NUMERIC(10, 2) NOT NULL,
   image_url TEXT,
+  extras JSONB DEFAULT '[]',
   is_available BOOLEAN DEFAULT true,
   display_order INTEGER DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

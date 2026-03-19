@@ -43,6 +43,7 @@ interface MenuItem {
   subcategory: string;
   subcategory_id?: string;
   image_url: string;
+  extras?: { name: string; price: number }[];
 }
 
 interface Category {
@@ -82,6 +83,7 @@ export default function App() {
   const [isSubcategoryModalOpen, setIsSubcategoryModalOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
+  const [selectedExtras, setSelectedExtras] = useState<Set<number>>(new Set());
   const [mediaFiles, setMediaFiles] = useState<any[]>([]);
   const [isMediaLibraryOpen, setIsMediaLibraryOpen] = useState(false);
   const [mediaLoading, setMediaLoading] = useState(false);
@@ -473,7 +475,8 @@ export default function App() {
         price: editingItem.price,
         image_url: editingItem.image_url || '',
         subcategory_id: editingItem.subcategory_id,
-        is_available: true
+        is_available: true,
+        extras: editingItem.extras || []
       };
 
       if (editingItem.id) {
@@ -1363,6 +1366,72 @@ export default function App() {
                         />
                       </div>
 
+                      <div className="space-y-6">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400 ml-1">Extras / Add-ons</label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const currentExtras = editingItem?.extras || [];
+                              setEditingItem(prev => ({
+                                ...prev,
+                                extras: [...currentExtras, { name: '', price: 0 }]
+                              }));
+                            }}
+                            className="text-[10px] uppercase tracking-[0.2em] font-bold text-primary hover:text-ink transition-colors flex items-center gap-2"
+                          >
+                            <Plus className="w-3 h-3" />
+                            Add Extra
+                          </button>
+                        </div>
+                        
+                        <div className="space-y-4">
+                          {(editingItem?.extras || []).map((extra, index) => (
+                            <div key={index} className="flex items-end gap-4 group">
+                              <div className="flex-1 space-y-2">
+                                <input
+                                  type="text"
+                                  value={extra.name}
+                                  onChange={(e) => {
+                                    const newExtras = [...(editingItem?.extras || [])];
+                                    newExtras[index].name = e.target.value;
+                                    setEditingItem(prev => ({ ...prev, extras: newExtras }));
+                                  }}
+                                  className="w-full px-0 py-2 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-serif italic text-lg text-ink placeholder:text-gray-200"
+                                  placeholder="Extra name (e.g. Caramel syrup)"
+                                />
+                              </div>
+                              <div className="w-32 space-y-2">
+                                <input
+                                  type="number"
+                                  value={extra.price}
+                                  onChange={(e) => {
+                                    const newExtras = [...(editingItem?.extras || [])];
+                                    newExtras[index].price = parseInt(e.target.value) || 0;
+                                    setEditingItem(prev => ({ ...prev, extras: newExtras }));
+                                  }}
+                                  className="w-full px-0 py-2 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-serif italic text-lg text-ink placeholder:text-gray-200"
+                                  placeholder="Price"
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newExtras = (editingItem?.extras || []).filter((_, i) => i !== index);
+                                  setEditingItem(prev => ({ ...prev, extras: newExtras }));
+                                }}
+                                className="p-2 text-gray-300 hover:text-red-500 transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ))}
+                          {(editingItem?.extras || []).length === 0 && (
+                            <p className="text-[10px] text-gray-300 italic tracking-widest">No extras defined for this item.</p>
+                          )}
+                        </div>
+                      </div>
+
                       <div className="space-y-8">
                         <label className="text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400 ml-1">Visual Representation</label>
                         <div className="flex flex-col md:flex-row gap-12">
@@ -1528,22 +1597,22 @@ export default function App() {
                     return (
                       <div key={actualKey} id={`category-${actualKey}`} className="space-y-16 scroll-mt-48">
                         <div className="flex flex-col items-center gap-8">
-                          <div className="flex items-center gap-12 w-full">
-                            <div className="h-px flex-1 bg-line"></div>
-                            <h2 className="text-5xl font-serif italic text-ink lowercase tracking-tight">
+                          <div className="flex items-center gap-4 w-full">
+                            <div className="h-px flex-1 bg-line opacity-30"></div>
+                            <h2 className="text-lg font-serif italic text-ink lowercase tracking-tight px-5 py-1.5 border border-line rounded-xl bg-white shadow-sm">
                               {actualKey}
                             </h2>
-                            <div className="h-px flex-1 bg-line"></div>
+                            <div className="h-px flex-1 bg-line opacity-30"></div>
                           </div>
                           
-                          <div className="flex gap-8 overflow-x-auto no-scrollbar w-full justify-center pb-4">
+                          <div className="flex gap-3 overflow-x-auto no-scrollbar w-full justify-center pb-2">
                             {Object.keys(subcategories).map(sub => (
                               <button
                                 key={sub}
                                 onClick={() => {
                                   const element = document.getElementById(`subcategory-${actualKey}-${sub}`);
                                   if (element) {
-                                    const offset = 240;
+                                    const offset = 200;
                                     const bodyRect = document.body.getBoundingClientRect().top;
                                     const elementRect = element.getBoundingClientRect().top;
                                     const elementPosition = elementRect - bodyRect;
@@ -1551,7 +1620,7 @@ export default function App() {
                                     window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
                                   }
                                 }}
-                                className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400 hover:text-primary transition-colors whitespace-nowrap"
+                                className="px-3 py-1 text-[8px] uppercase tracking-[0.2em] font-bold text-gray-400 hover:text-ink border border-line rounded-lg hover:bg-white hover:shadow-sm transition-all whitespace-nowrap"
                               >
                                 {sub}
                               </button>
@@ -1574,7 +1643,10 @@ export default function App() {
                                     initial={{ opacity: 0 }}
                                     whileInView={{ opacity: 1 }}
                                     viewport={{ once: true }}
-                                    onClick={() => setSelectedItem(item)}
+                                    onClick={() => {
+                                      setSelectedItem(item);
+                                      setSelectedExtras(new Set());
+                                    }}
                                     className="group cursor-pointer flex items-center gap-6"
                                   >
                                     <div className="w-24 h-24 flex-shrink-0 overflow-hidden bg-white border border-line rounded-2xl relative">
@@ -1712,8 +1784,38 @@ export default function App() {
                 </div>
 
                 <div className="space-y-8">
+                  {selectedItem.extras && selectedItem.extras.length > 0 && (
+                    <div className="space-y-4">
+                      <label className="text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400">Enhancements</label>
+                      <div className="space-y-3">
+                        {selectedItem.extras.map((extra, idx) => (
+                          <div 
+                            key={idx} 
+                            onClick={() => {
+                              const newSelected = new Set(selectedExtras);
+                              if (newSelected.has(idx)) newSelected.delete(idx);
+                              else newSelected.add(idx);
+                              setSelectedExtras(newSelected);
+                            }}
+                            className="flex items-center justify-between group cursor-pointer"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={`w-4 h-4 border border-line rounded flex items-center justify-center transition-colors ${selectedExtras.has(idx) ? 'bg-primary border-primary' : 'group-hover:border-primary'}`}>
+                                <Plus className={`w-2 h-2 text-white transition-opacity ${selectedExtras.has(idx) ? 'opacity-100' : 'opacity-0'}`} />
+                              </div>
+                              <span className={`text-sm font-serif italic transition-colors ${selectedExtras.has(idx) ? 'text-primary' : 'text-ink'}`}>{extra.name}</span>
+                            </div>
+                            <span className="text-[10px] font-bold text-gray-400">+{extra.price.toLocaleString()} IQD</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex items-baseline gap-2">
-                    <span className="text-4xl font-light text-ink">{selectedItem.price.toLocaleString()}</span>
+                    <span className="text-4xl font-light text-ink">
+                      {(selectedItem.price + Array.from(selectedExtras).reduce((acc, idx) => acc + (selectedItem.extras?.[idx]?.price || 0), 0)).toLocaleString()}
+                    </span>
                     <span className="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-300">IQD</span>
                   </div>
 
