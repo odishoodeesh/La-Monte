@@ -4,7 +4,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import multer from "multer";
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, ListObjectsV2Command, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { v4 as uuidv4 } from "uuid";
 
 dotenv.config();
@@ -32,6 +32,51 @@ async function startServer() {
   app.use(express.json({ limit: "50mb" }));
 
   // API Routes
+  app.get("/api/media", async (req, res) => {
+    try {
+      const bucketName = process.env.S3_BUCKET || "uploads";
+      const command = new ListObjectsV2Command({
+        Bucket: bucketName,
+      });
+
+      const response = await s3Client.send(command);
+      const contents = response.Contents || [];
+      
+      // Map to a format similar to Supabase storage list
+      const media = contents.map(item => ({
+        name: item.Key,
+        created_at: item.LastModified,
+        metadata: {
+          size: item.Size,
+          mimetype: "image/png" // Default or infer from extension if needed
+        }
+      })).filter(item => item.name !== ".emptyFolderPlaceholder");
+
+      res.json(media);
+    } catch (error: any) {
+      console.error("List media error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/media/:name", async (req, res) => {
+    try {
+      const { name } = req.params;
+      const bucketName = process.env.S3_BUCKET || "uploads";
+      
+      const command = new DeleteObjectCommand({
+        Bucket: bucketName,
+        Key: name,
+      });
+
+      await s3Client.send(command);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Delete media error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.post("/api/upload", upload.single("image"), async (req, res) => {
     try {
       if (!req.file) {

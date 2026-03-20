@@ -30,7 +30,8 @@ import {
   Coffee,
   Layers,
   Grid,
-  BarChart3
+  BarChart3,
+  ShoppingBag
 } from "lucide-react";
 import { GoogleGenAI } from "@google/genai";
 
@@ -44,6 +45,14 @@ interface MenuItem {
   subcategory_id?: string;
   image_url: string;
   extras?: { name: string; price: number }[];
+}
+
+interface CartItem {
+  id: string;
+  menuItem: MenuItem;
+  selectedExtras: { name: string; price: number }[];
+  totalPrice: number;
+  quantity: number;
 }
 
 interface Category {
@@ -84,12 +93,93 @@ export default function App() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [selectedExtras, setSelectedExtras] = useState<Set<number>>(new Set());
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
+  const [orderConfirmed, setOrderConfirmed] = useState(false);
   const [mediaFiles, setMediaFiles] = useState<any[]>([]);
   const [isMediaLibraryOpen, setIsMediaLibraryOpen] = useState(false);
   const [mediaLoading, setMediaLoading] = useState(false);
   const [mediaError, setMediaError] = useState<string | null>(null);
   const [showHeader, setShowHeader] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
+
+  const addToCart = () => {
+    if (!selectedItem) return;
+
+    const extras = selectedItem.extras 
+      ? Array.from(selectedExtras).map(idx => selectedItem.extras![idx])
+      : [];
+    
+    const totalPrice = selectedItem.price + extras.reduce((acc, e) => acc + e.price, 0);
+
+    const newCartItem: CartItem = {
+      id: Math.random().toString(36).substr(2, 9),
+      menuItem: selectedItem,
+      selectedExtras: extras,
+      totalPrice,
+      quantity: 1
+    };
+
+    setCart(prev => [...prev, newCartItem]);
+    setSelectedItem(null);
+    setSelectedExtras(new Set());
+    setIsCartOpen(true);
+  };
+
+  const removeFromCart = (id: string) => {
+    setCart(prev => prev.filter(item => item.id !== id));
+  };
+
+  const updateQuantity = (id: string, delta: number) => {
+    setCart(prev => prev.map(item => {
+      if (item.id === id) {
+        const newQty = Math.max(1, item.quantity + delta);
+        return { ...item, quantity: newQty };
+      }
+      return item;
+    }));
+  };
+
+  const cartTotal = cart.reduce((acc, item) => acc + (item.totalPrice * item.quantity), 0);
+
+  const submitOrder = async () => {
+    if (cart.length === 0) return;
+    
+    setIsSubmittingOrder(true);
+    try {
+      const orderData = {
+        items: cart.map(item => ({
+          id: item.menuItem.id,
+          name: item.menuItem.name,
+          quantity: item.quantity,
+          selectedExtras: item.selectedExtras,
+          totalPrice: item.totalPrice
+        })),
+        total_price: cartTotal,
+        user_id: session?.user?.id || null,
+        status: 'pending'
+      };
+
+      const { error } = await supabase
+        .from('orders')
+        .insert([orderData]);
+
+      if (error) throw error;
+
+      setOrderConfirmed(true);
+      setCart([]);
+      setTimeout(() => {
+        setOrderConfirmed(false);
+        setIsCartOpen(false);
+      }, 3000);
+    } catch (error: any) {
+      console.error('Error submitting order:', error);
+      alert('Failed to submit order. Please try again.');
+    } finally {
+      setIsSubmittingOrder(false);
+    }
+  };
 
   useEffect(() => {
     const controlNavbar = () => {
@@ -211,25 +301,16 @@ export default function App() {
     setMediaLoading(true);
     setMediaError(null);
     try {
-      console.log('Fetching media from bucket: uploads');
-      const { data, error } = await supabase.storage
-        .from('uploads')
-        .list('', {
-          limit: 100,
-          offset: 0,
-          sortBy: { column: 'name', order: 'asc' },
-        });
-
-      if (error) {
-        console.error('Supabase list error:', error);
-        setMediaError(`Failed to list files: ${error.message}`);
-        throw error;
+      console.log('Fetching media from server API');
+      const response = await fetch('/api/media');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch media');
       }
       
+      const data = await response.json();
       console.log('Media fetched successfully, count:', data?.length);
-      // Filter out the .emptyFolderPlaceholder if it exists
-      const filteredData = data?.filter(file => file.name !== '.emptyFolderPlaceholder') || [];
-      setMediaFiles(filteredData);
+      setMediaFiles(data);
     } catch (error: any) {
       console.error('Error fetching media:', error.message);
       setMediaError(error.message);
@@ -252,25 +333,24 @@ export default function App() {
     }
     setMediaLoading(true);
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
-      const filePath = `${fileName}`;
+      const formData = new FormData();
+      formData.append('image', file);
 
-      console.log('Uploading to bucket: uploads, path:', filePath);
-      const { data, error } = await supabase.storage
-        .from('uploads')
-        .upload(filePath, file);
+      console.log('Uploading to server API');
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
 
-      if (error) {
-        console.error('Supabase storage error:', error);
-        throw error;
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Upload failed');
       }
       
-      console.log('Upload successful:', data);
-      const publicUrl = getPublicUrl(fileName);
-      console.log('Public URL:', publicUrl);
+      const { url } = await response.json();
+      console.log('Upload successful, URL:', url);
       await fetchMedia();
-      return publicUrl;
+      return url;
     } catch (error: any) {
       console.error('Upload catch error:', error);
       alert('Upload failed: ' + error.message);
@@ -291,11 +371,15 @@ export default function App() {
 
     setMediaLoading(true);
     try {
-      const { error } = await supabase.storage
-        .from('uploads')
-        .remove([`${name}`]);
+      const response = await fetch(`/api/media/${encodeURIComponent(name)}`, {
+        method: 'DELETE',
+      });
 
-      if (error) throw error;
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Delete failed');
+      }
+
       fetchMedia();
     } catch (error: any) {
       alert(error.message);
@@ -602,7 +686,7 @@ export default function App() {
                   referrerPolicy="no-referrer"
                 />
                 <div className="space-y-2">
-                  <h2 className="text-4xl font-serif text-ink italic">
+                  <h2 className="text-4xl font-display text-ink italic">
                     Admin Access
                   </h2>
                   <p className="text-sm text-gray-400 tracking-widest uppercase font-light">
@@ -750,7 +834,7 @@ export default function App() {
                 <div className="space-y-24">
                   <div className="flex flex-col md:flex-row md:items-end justify-between gap-8">
                     <div className="space-y-4">
-                      <h1 className="text-6xl font-serif text-ink italic leading-tight">
+                      <h1 className="text-6xl font-display text-ink italic leading-tight">
                         Dashboard
                       </h1>
                       <p className="text-gray-400 font-light tracking-wide max-w-md">
@@ -793,7 +877,7 @@ export default function App() {
                           {item.icon}
                         </div>
                         <div className="space-y-2">
-                          <h3 className="text-2xl font-serif italic text-ink">{item.title}</h3>
+                          <h3 className="text-2xl font-display italic text-ink">{item.title}</h3>
                           <p className="text-xs text-gray-400 font-light tracking-wide">{item.desc}</p>
                         </div>
                       </motion.div>
@@ -833,7 +917,7 @@ export default function App() {
                       <tbody className="divide-y divide-line">
                         {categories.map((cat) => (
                           <tr key={cat.id} className="hover:bg-bg/30 transition-colors group">
-                            <td className="px-8 py-6 font-serif italic text-xl text-ink">{cat.name}</td>
+                            <td className="px-8 py-6 font-display italic text-xl text-ink">{cat.name}</td>
                             <td className="px-8 py-6 text-right">
                               <div className="flex items-center justify-end gap-6">
                                 <button
@@ -893,7 +977,7 @@ export default function App() {
                       <tbody className="divide-y divide-line">
                         {subcategories.map((sub) => (
                           <tr key={sub.id} className="hover:bg-bg/30 transition-colors group">
-                            <td className="px-8 py-6 font-serif italic text-xl text-ink">{sub.name}</td>
+                            <td className="px-8 py-6 font-display italic text-xl text-ink">{sub.name}</td>
                             <td className="px-8 py-6">
                               <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary">
                                 {categories.find(c => c.id === sub.category_id)?.name}
@@ -971,7 +1055,7 @@ export default function App() {
                                   )}
                                 </div>
                                 <div>
-                                  <div className="font-serif italic text-xl text-ink">{item.name}</div>
+                                  <div className="font-display italic text-xl text-ink">{item.name}</div>
                                   <div className="text-[10px] text-gray-400 uppercase tracking-widest line-clamp-1 mt-1">{item.description}</div>
                                 </div>
                               </div>
@@ -984,7 +1068,7 @@ export default function App() {
                                 <span className="text-[10px] text-gray-400 uppercase tracking-widest">{item.subcategory}</span>
                               </div>
                             </td>
-                            <td className="px-8 py-6 font-serif italic text-lg text-ink">
+                            <td className="px-8 py-6 font-display italic text-lg text-ink">
                               {item.price.toLocaleString()} <span className="text-[10px] text-gray-400 uppercase tracking-widest not-italic ml-1">IQD</span>
                             </td>
                             <td className="px-8 py-6 text-right">
@@ -1033,7 +1117,7 @@ export default function App() {
                     className="relative w-full max-w-md bg-white rounded-[40px] shadow-2xl overflow-hidden"
                   >
                     <div className="p-12 border-b border-line flex items-center justify-between bg-bg">
-                      <h2 className="text-4xl font-serif italic text-ink lowercase">
+                      <h2 className="text-4xl font-display italic text-ink lowercase">
                         {editingCategory?.id ? 'Refine Collection' : 'New Collection'}
                       </h2>
                       <button onClick={() => setIsCategoryModalOpen(false)} className="p-2 text-gray-400 hover:text-ink transition-colors">
@@ -1049,7 +1133,7 @@ export default function App() {
                           required
                           value={editingCategory?.name || ''}
                           onChange={(e) => setEditingCategory(prev => ({ ...prev, name: e.target.value }))}
-                          className="w-full px-0 py-3 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-serif italic text-xl text-ink placeholder:text-gray-200"
+                          className="w-full px-0 py-3 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-display italic text-xl text-ink placeholder:text-gray-200"
                           placeholder="e.g. Drinks, Food, etc."
                         />
                       </div>
@@ -1095,7 +1179,7 @@ export default function App() {
                     className="relative w-full max-w-md bg-white rounded-[40px] shadow-2xl overflow-hidden"
                   >
                     <div className="p-12 border-b border-line flex items-center justify-between bg-bg">
-                      <h2 className="text-4xl font-serif italic text-ink lowercase">
+                      <h2 className="text-4xl font-display italic text-ink lowercase">
                         {editingSubcategory?.id ? 'Refine Classification' : 'New Classification'}
                       </h2>
                       <button onClick={() => setIsSubcategoryModalOpen(false)} className="p-2 text-gray-400 hover:text-ink transition-colors">
@@ -1110,7 +1194,7 @@ export default function App() {
                           required
                           value={editingSubcategory?.category_id || ''}
                           onChange={(e) => setEditingSubcategory(prev => ({ ...prev, category_id: e.target.value }))}
-                          className="w-full px-0 py-3 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-serif italic text-xl text-ink appearance-none cursor-pointer"
+                          className="w-full px-0 py-3 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-display italic text-xl text-ink appearance-none cursor-pointer"
                         >
                           <option value="" disabled>Select Collection</option>
                           {categories.map(cat => (
@@ -1126,7 +1210,7 @@ export default function App() {
                           required
                           value={editingSubcategory?.name || ''}
                           onChange={(e) => setEditingSubcategory(prev => ({ ...prev, name: e.target.value }))}
-                          className="w-full px-0 py-3 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-serif italic text-xl text-ink placeholder:text-gray-200"
+                          className="w-full px-0 py-3 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-display italic text-xl text-ink placeholder:text-gray-200"
                           placeholder="e.g. Hot Drinks, Pasta, etc."
                         />
                       </div>
@@ -1173,7 +1257,7 @@ export default function App() {
                   >
                     <div className="p-12 border-b border-line flex items-center justify-between bg-bg/50 backdrop-blur-sm">
                       <div>
-                        <h2 className="text-4xl font-serif italic text-ink lowercase">Media Library</h2>
+                        <h2 className="text-4xl font-display italic text-ink lowercase">Media Library</h2>
                         <p className="text-[10px] uppercase tracking-[0.2em] text-gray-400 mt-2">Curate your visual selection</p>
                       </div>
                       <div className="flex items-center gap-6">
@@ -1272,7 +1356,7 @@ export default function App() {
                     className="relative w-full max-w-2xl bg-white rounded-[40px] shadow-2xl overflow-hidden"
                   >
                     <div className="p-12 border-b border-line flex items-center justify-between bg-bg">
-                      <h2 className="text-4xl font-serif italic text-ink lowercase">
+                      <h2 className="text-4xl font-display italic text-ink lowercase">
                         {editingItem?.id ? 'Refine Item' : 'New Creation'}
                       </h2>
                       <button onClick={() => setIsModalOpen(false)} className="p-2 text-gray-400 hover:text-ink transition-colors">
@@ -1289,7 +1373,7 @@ export default function App() {
                             required
                             value={editingItem?.name || ''}
                             onChange={(e) => setEditingItem(prev => ({ ...prev, name: e.target.value }))}
-                            className="w-full px-0 py-3 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-serif italic text-xl text-ink placeholder:text-gray-200"
+                            className="w-full px-0 py-3 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-display italic text-xl text-ink placeholder:text-gray-200"
                             placeholder="e.g. Spanish Latte"
                           />
                         </div>
@@ -1300,7 +1384,7 @@ export default function App() {
                             required
                             value={editingItem?.price || 0}
                             onChange={(e) => setEditingItem(prev => ({ ...prev, price: parseInt(e.target.value) }))}
-                            className="w-full px-0 py-3 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-serif italic text-xl text-ink placeholder:text-gray-200"
+                            className="w-full px-0 py-3 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-display italic text-xl text-ink placeholder:text-gray-200"
                             placeholder="7000"
                           />
                         </div>
@@ -1322,7 +1406,7 @@ export default function App() {
                                 subcategory_id: firstSub?.id || ''
                               }));
                             }}
-                            className="w-full px-0 py-3 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-serif italic text-xl text-ink appearance-none cursor-pointer"
+                            className="w-full px-0 py-3 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-display italic text-xl text-ink appearance-none cursor-pointer"
                           >
                             <option value="" disabled>Select Collection</option>
                             {categories.map(cat => (
@@ -1343,7 +1427,7 @@ export default function App() {
                                 subcategory_id: subId 
                               }));
                             }}
-                            className="w-full px-0 py-3 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-serif italic text-xl text-ink appearance-none cursor-pointer"
+                            className="w-full px-0 py-3 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-display italic text-xl text-ink appearance-none cursor-pointer"
                           >
                             <option value="" disabled>Select Classification</option>
                             {subcategories
@@ -1361,7 +1445,7 @@ export default function App() {
                         <textarea
                           value={editingItem?.description || ''}
                           onChange={(e) => setEditingItem(prev => ({ ...prev, description: e.target.value }))}
-                          className="w-full px-0 py-3 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-serif italic text-xl text-ink h-24 resize-none placeholder:text-gray-200"
+                          className="w-full px-0 py-3 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-display italic text-xl text-ink h-24 resize-none placeholder:text-gray-200"
                           placeholder="Describe the essence..."
                         />
                       </div>
@@ -1397,7 +1481,7 @@ export default function App() {
                                     newExtras[index].name = e.target.value;
                                     setEditingItem(prev => ({ ...prev, extras: newExtras }));
                                   }}
-                                  className="w-full px-0 py-2 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-serif italic text-lg text-ink placeholder:text-gray-200"
+                                  className="w-full px-0 py-2 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-display italic text-lg text-ink placeholder:text-gray-200"
                                   placeholder="Extra name (e.g. Caramel syrup)"
                                 />
                               </div>
@@ -1410,7 +1494,7 @@ export default function App() {
                                     newExtras[index].price = parseInt(e.target.value) || 0;
                                     setEditingItem(prev => ({ ...prev, extras: newExtras }));
                                   }}
-                                  className="w-full px-0 py-2 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-serif italic text-lg text-ink placeholder:text-gray-200"
+                                  className="w-full px-0 py-2 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-display italic text-lg text-ink placeholder:text-gray-200"
                                   placeholder="Price"
                                 />
                               </div>
@@ -1441,7 +1525,7 @@ export default function App() {
                                 type="text"
                                 value={editingItem?.image_url || ''}
                                 onChange={(e) => setEditingItem(prev => ({ ...prev, image_url: e.target.value }))}
-                                className="flex-1 px-0 py-3 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-serif italic text-lg text-ink placeholder:text-gray-200"
+                                className="flex-1 px-0 py-3 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-display italic text-lg text-ink placeholder:text-gray-200"
                                 placeholder="Visual URL"
                               />
                               <button
@@ -1536,17 +1620,51 @@ export default function App() {
           >
             <motion.header 
               animate={{ y: showHeader ? 0 : -200 }}
-              transition={{ duration: 0.3, ease: "easeInOut" }}
-              className="py-4 flex flex-col items-center bg-white border-b border-line sticky top-0 z-50"
+              transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+              className="py-6 flex flex-col items-center bg-white/80 backdrop-blur-md border-b border-line sticky top-0 z-50"
             >
-              <img
-                src="https://i.ibb.co/84TCyPNf/logo.png"
-                alt="Lamonte Logo"
-                className="h-8 mb-4"
-                referrerPolicy="no-referrer"
-              />
+              <div className="w-full flex items-center justify-between px-8 md:px-12 mb-8">
+                <div className="w-10 flex items-center">
+                  {!session && (
+                    <button 
+                      onClick={() => setView('auth')}
+                      className="p-2 text-gray-300 hover:text-ink transition-colors"
+                      title="Admin Access"
+                    >
+                      <User className="w-5 h-5" />
+                    </button>
+                  )}
+                </div>
+                <div className="flex flex-col items-center gap-2">
+                  <img
+                    src="https://i.ibb.co/84TCyPNf/logo.png"
+                    alt="Lamonte Logo"
+                    className="h-10 md:h-12 transition-all duration-500 hover:scale-105"
+                    referrerPolicy="no-referrer"
+                  />
+                  <span className="text-[8px] uppercase tracking-[0.6em] font-bold text-gray-400 ml-2">Lounge & Restaurant</span>
+                </div>
+                <button 
+                  onClick={() => setIsCartOpen(true)}
+                  className="relative p-3 text-ink hover:text-primary transition-all duration-500 group bg-bg rounded-full border border-line hover:border-primary/20"
+                >
+                  <ShoppingBag className="w-6 h-6 group-hover:scale-110 transition-transform duration-500" />
+                  <AnimatePresence>
+                    {cart.length > 0 && (
+                      <motion.span 
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        exit={{ scale: 0 }}
+                        className="absolute -top-1 -right-1 bg-primary text-white text-[9px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-lg border-2 border-white"
+                      >
+                        {cart.reduce((sum, item) => sum + item.quantity, 0)}
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </button>
+              </div>
               
-              <div className="flex gap-6 px-8 overflow-x-auto no-scrollbar w-full max-w-2xl justify-center">
+              <div className="flex gap-10 px-8 overflow-x-auto no-scrollbar w-full max-w-3xl justify-center">
                 {[
                   { id: 'DRINKS', label: 'Beverages' },
                   { id: 'SHISHA', label: 'Shisha' },
@@ -1584,7 +1702,7 @@ export default function App() {
                 </div>
               ) : menuItems.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-32 gap-8 text-center">
-                  <h3 className="text-4xl font-serif italic text-ink">Coming Soon</h3>
+                  <h3 className="text-4xl font-display italic text-ink">Coming Soon</h3>
                   <p className="text-gray-400 font-light tracking-wide max-w-xs">Our artisans are curating the perfect selection for you.</p>
                 </div>
               ) : (
@@ -1599,7 +1717,7 @@ export default function App() {
                         <div className="flex flex-col items-center gap-8">
                           <div className="flex items-center gap-4 w-full">
                             <div className="h-px flex-1 bg-line opacity-30"></div>
-                            <h2 className="text-lg font-serif italic text-ink lowercase tracking-tight px-5 py-1.5 border border-line rounded-xl bg-white shadow-sm">
+                            <h2 className="text-lg font-display italic text-ink lowercase tracking-tight px-5 py-1.5 border border-line rounded-xl bg-white shadow-sm">
                               {actualKey}
                             </h2>
                             <div className="h-px flex-1 bg-line opacity-30"></div>
@@ -1632,7 +1750,7 @@ export default function App() {
                           {Object.entries(subcategories).map(([subcategory, items]) => (
                             <div key={subcategory} id={`subcategory-${actualKey}-${subcategory}`} className="space-y-12 scroll-mt-60">
                               <div className="flex items-center gap-6">
-                                <h3 className="text-2xl font-serif italic text-ink">{subcategory}</h3>
+                                <h3 className="text-2xl font-display italic text-ink">{subcategory}</h3>
                                 <div className="h-px flex-1 bg-line opacity-50" />
                               </div>
                               
@@ -1667,7 +1785,7 @@ export default function App() {
                                     
                                     <div className="flex-1 space-y-2">
                                       <div className="flex justify-between items-baseline gap-4">
-                                        <h4 className="text-xl font-serif italic text-ink group-hover:text-primary transition-colors">
+                                        <h4 className="text-xl font-display italic text-ink group-hover:text-primary transition-colors">
                                           {item.name}
                                         </h4>
                                         <div className="h-px flex-1 bg-line border-dotted border-b opacity-30" />
@@ -1771,7 +1889,7 @@ export default function App() {
                         {selectedItem.subcategory}
                       </span>
                     </div>
-                    <h2 className="text-5xl font-serif italic text-ink leading-tight">
+                    <h2 className="text-5xl font-display italic text-ink leading-tight">
                       {selectedItem.name}
                     </h2>
                   </div>
@@ -1803,7 +1921,7 @@ export default function App() {
                               <div className={`w-4 h-4 border border-line rounded flex items-center justify-center transition-colors ${selectedExtras.has(idx) ? 'bg-primary border-primary' : 'group-hover:border-primary'}`}>
                                 <Plus className={`w-2 h-2 text-white transition-opacity ${selectedExtras.has(idx) ? 'opacity-100' : 'opacity-0'}`} />
                               </div>
-                              <span className={`text-sm font-serif italic transition-colors ${selectedExtras.has(idx) ? 'text-primary' : 'text-ink'}`}>{extra.name}</span>
+                              <span className={`text-sm font-display italic transition-colors ${selectedExtras.has(idx) ? 'text-primary' : 'text-ink'}`}>{extra.name}</span>
                             </div>
                             <span className="text-[10px] font-bold text-gray-400">+{extra.price.toLocaleString()} IQD</span>
                           </div>
@@ -1812,21 +1930,199 @@ export default function App() {
                     </div>
                   )}
 
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-4xl font-light text-ink">
-                      {(selectedItem.price + Array.from(selectedExtras).reduce((acc, idx) => acc + (selectedItem.extras?.[idx]?.price || 0), 0)).toLocaleString()}
-                    </span>
-                    <span className="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-300">IQD</span>
-                  </div>
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-4xl font-light text-ink">
+                        {(selectedItem.price + Array.from(selectedExtras).reduce((acc, idx) => acc + (selectedItem.extras?.[idx]?.price || 0), 0)).toLocaleString()}
+                      </span>
+                      <span className="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-300">IQD</span>
+                    </div>
 
-                  <button
-                    onClick={() => setSelectedItem(null)}
-                    className="w-full py-5 bg-ink text-white text-[10px] uppercase tracking-[0.4em] font-bold hover:bg-primary transition-all duration-500"
+                    <div className="flex gap-4">
+                      <button
+                        onClick={addToCart}
+                        className="flex-1 py-5 bg-ink text-white text-[10px] uppercase tracking-[0.4em] font-bold hover:bg-primary transition-all duration-500 flex items-center justify-center gap-3"
+                      >
+                        Add to Selection
+                      </button>
+                      <button
+                        onClick={() => setSelectedItem(null)}
+                        className="px-8 py-5 border border-line text-ink text-[10px] uppercase tracking-[0.4em] font-bold hover:bg-bg transition-all duration-500"
+                      >
+                        Back
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+      {/* Cart Slide-over */}
+      <AnimatePresence>
+        {isCartOpen && (
+          <div className="fixed inset-0 z-[100] flex justify-end">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsCartOpen(false)}
+              className="absolute inset-0 bg-ink/40 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col"
+            >
+              <div className="p-8 border-b border-line flex items-center justify-between bg-bg/50 backdrop-blur-sm">
+                <div className="space-y-1">
+                  <h2 className="text-3xl font-display italic text-ink lowercase">Selection</h2>
+                  <p className="text-[10px] uppercase tracking-[0.2em] text-gray-400">
+                    {cart.length} {cart.length === 1 ? 'Creation' : 'Creations'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-4">
+                  {cart.length > 0 && (
+                    <button 
+                      onClick={() => {
+                        if (confirm('Clear all items from selection?')) setCart([]);
+                      }}
+                      className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                      title="Clear Selection"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  )}
+                  <button 
+                    onClick={() => setIsCartOpen(false)}
+                    className="p-2 text-gray-300 hover:text-ink transition-colors"
                   >
-                    Return to Menu
+                    <X className="w-6 h-6" />
                   </button>
                 </div>
               </div>
+
+              <div className="flex-1 overflow-y-auto p-8 bg-bg custom-scrollbar">
+                {orderConfirmed ? (
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="h-full flex flex-col items-center justify-center text-center space-y-6"
+                  >
+                    <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center">
+                      <Sparkles className="w-10 h-10 text-primary animate-pulse" />
+                    </div>
+                    <div className="space-y-2">
+                      <h3 className="text-2xl font-display italic text-ink">Selection Confirmed</h3>
+                      <p className="text-xs text-gray-400 max-w-[200px] leading-relaxed">
+                        Your order has been transmitted. We are preparing your experience.
+                      </p>
+                    </div>
+                  </motion.div>
+                ) : cart.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center space-y-6 opacity-40">
+                    <ShoppingBag className="w-16 h-16 text-gray-300" />
+                    <div className="space-y-2">
+                      <p className="text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400">Your selection is empty</p>
+                      <button 
+                        onClick={() => setIsCartOpen(false)}
+                        className="text-xs font-display italic text-ink hover:text-primary transition-colors"
+                      >
+                        Explore our menu
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-12">
+                    {cart.map((item) => (
+                      <div key={item.id} className="flex gap-6 group">
+                        <div className="w-20 h-20 bg-white rounded-2xl overflow-hidden flex-shrink-0 border border-line shadow-sm group-hover:shadow-md transition-all duration-500">
+                          <img 
+                            src={item.menuItem.image_url} 
+                            alt={item.menuItem.name} 
+                            className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700"
+                            referrerPolicy="no-referrer"
+                          />
+                        </div>
+                        <div className="flex-1 space-y-3">
+                          <div className="flex justify-between items-start gap-4">
+                            <div>
+                              <h3 className="text-lg font-display italic text-ink">{item.menuItem.name}</h3>
+                              {item.selectedExtras.length > 0 && (
+                                <p className="text-[10px] text-gray-400 italic mt-1">
+                                  + {item.selectedExtras.map(e => e.name).join(', ')}
+                                </p>
+                              )}
+                            </div>
+                            <button 
+                              onClick={() => removeFromCart(item.id)}
+                              className="p-1 text-gray-200 hover:text-red-500 transition-colors"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <div className="flex items-center gap-4 border border-line rounded-xl px-3 py-1.5 bg-white shadow-sm">
+                              <button 
+                                onClick={() => updateQuantity(item.id, -1)}
+                                className="text-gray-400 hover:text-ink transition-colors p-0.5"
+                              >
+                                <ChevronDown className="w-3.5 h-3.5" />
+                              </button>
+                              <span className="text-xs font-bold text-ink w-4 text-center">{item.quantity}</span>
+                              <button 
+                                onClick={() => updateQuantity(item.id, 1)}
+                                className="text-gray-400 hover:text-ink transition-colors p-0.5"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-sm font-display italic text-ink">{(item.totalPrice * item.quantity).toLocaleString()}</span>
+                              <span className="text-[8px] font-bold text-gray-400 ml-1 uppercase tracking-widest">IQD</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {cart.length > 0 && !orderConfirmed && (
+                <div className="p-8 bg-bg/80 backdrop-blur-md border-t border-line space-y-8">
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400">Total Investment</span>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-3xl font-display italic text-ink">{cartTotal.toLocaleString()}</span>
+                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">IQD</span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <button
+                      onClick={() => setIsCartOpen(false)}
+                      className="py-5 border border-line text-ink text-[10px] uppercase tracking-[0.4em] font-bold hover:border-primary hover:text-primary transition-all duration-500"
+                    >
+                      Continue
+                    </button>
+                    <button
+                      onClick={submitOrder}
+                      disabled={isSubmittingOrder}
+                      className="py-5 bg-ink text-white text-[10px] uppercase tracking-[0.4em] font-bold hover:bg-primary transition-all duration-500 flex items-center justify-center gap-3 disabled:opacity-70"
+                    >
+                      {isSubmittingOrder ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-4 h-4" />
+                      )}
+                      Confirm
+                    </button>
+                  </div>
+                </div>
+              )}
             </motion.div>
           </div>
         )}
