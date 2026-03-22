@@ -31,7 +31,8 @@ import {
   Layers,
   Grid,
   BarChart3,
-  ShoppingBag
+  ShoppingBag,
+  Database
 } from "lucide-react";
 import { GoogleGenAI } from "@google/genai";
 
@@ -83,7 +84,7 @@ export default function App() {
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('DRINKS');
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
-  const [adminSubView, setAdminSubView] = useState<'dashboard' | 'menu' | 'categories' | 'subcategories'>('dashboard');
+  const [adminSubView, setAdminSubView] = useState<'dashboard' | 'menu' | 'categories' | 'subcategories' | 'database'>('dashboard');
   const [editingItem, setEditingItem] = useState<Partial<MenuItem> | null>(null);
   const [editingCategory, setEditingCategory] = useState<Partial<Category> | null>(null);
   const [editingSubcategory, setEditingSubcategory] = useState<Partial<Subcategory> | null>(null);
@@ -165,7 +166,12 @@ export default function App() {
         .from('orders')
         .insert([orderData]);
 
-      if (error) throw error;
+      if (error) {
+        if (error.message.includes('relation "public.orders" does not exist') || error.message.includes('orders')) {
+          throw new Error('The "orders" table is missing in your database. Please go to Admin Dashboard > Database to synchronize your schema.');
+        }
+        throw error;
+      }
 
       setOrderConfirmed(true);
       setCart([]);
@@ -568,12 +574,24 @@ export default function App() {
           .from('items')
           .update(itemToSave)
           .eq('id', editingItem.id);
-        if (error) throw error;
+        
+        if (error) {
+          if (error.message.includes('extras')) {
+            throw new Error('The "extras" column is missing in your database. Please go to Admin Dashboard > Database to synchronize your schema.');
+          }
+          throw error;
+        }
       } else {
         const { error } = await supabase
           .from('items')
           .insert([itemToSave]);
-        if (error) throw error;
+        
+        if (error) {
+          if (error.message.includes('extras')) {
+            throw new Error('The "extras" column is missing in your database. Please go to Admin Dashboard > Database to synchronize your schema.');
+          }
+          throw error;
+        }
       }
       setIsModalOpen(false);
       setEditingItem(null);
@@ -858,6 +876,7 @@ export default function App() {
                       { title: "Menu Items", desc: "Curate your offerings.", icon: <Coffee className="w-5 h-5" />, view: 'menu' },
                       { title: "Categories", desc: "Define the structure.", icon: <Layers className="w-5 h-5" />, view: 'categories' },
                       { title: "Subcategories", desc: "Nested organization.", icon: <Grid className="w-5 h-5" />, view: 'subcategories' },
+                      { title: "Database", desc: "Schema synchronization.", icon: <Database className="w-5 h-5" />, view: 'database' },
                       { title: "Media Library", desc: "Visual assets.", icon: <ImageIcon className="w-5 h-5" />, action: () => setIsMediaLibraryOpen(true) },
                       { title: "Analytics", desc: "Performance insights.", icon: <BarChart3 className="w-5 h-5" />, view: 'dashboard' }
                     ].map((item, i) => (
@@ -941,6 +960,114 @@ export default function App() {
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                </div>
+              ) : adminSubView === 'database' ? (
+                <div className="space-y-12">
+                  <div className="flex items-center justify-between">
+                    <button 
+                      onClick={() => setAdminSubView('dashboard')}
+                      className="flex items-center gap-3 text-gray-400 hover:text-ink transition-colors group"
+                    >
+                      <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                      <span className="text-[10px] uppercase tracking-[0.4em] font-bold">Return</span>
+                    </button>
+                  </div>
+
+                  <div className="bg-white border border-line p-12 space-y-12">
+                    <div className="space-y-4">
+                      <h2 className="text-4xl font-display italic text-ink lowercase">Database Synchronization</h2>
+                      <p className="text-gray-400 font-light tracking-wide max-w-2xl">
+                        To resolve schema errors like "Could not find the 'extras' column", you must synchronize your Supabase database with the required schema. Copy and run the following SQL in your Supabase SQL Editor.
+                      </p>
+                    </div>
+
+                    <div className="space-y-8">
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400 ml-1">SQL Synchronization Script</label>
+                          <button 
+                            onClick={() => {
+                              const sql = `
+-- 1. Add 'extras' column to 'items' table if it doesn't exist
+ALTER TABLE public.items 
+ADD COLUMN IF NOT EXISTS extras JSONB DEFAULT '[]';
+
+-- 2. Create 'orders' table if it doesn't exist
+CREATE TABLE IF NOT EXISTS public.orders (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  items JSONB NOT NULL DEFAULT '[]',
+  total_price NUMERIC(10, 2) NOT NULL,
+  user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'cancelled')),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 3. Enable RLS for 'orders'
+ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
+
+-- 4. Policies for 'orders'
+DROP POLICY IF EXISTS "Users can view own orders" ON public.orders;
+CREATE POLICY "Users can view own orders" ON public.orders
+  FOR SELECT USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Admins can view all orders" ON public.orders;
+CREATE POLICY "Admins can view all orders" ON public.orders
+  FOR SELECT USING (public.is_admin());
+
+DROP POLICY IF EXISTS "Anyone can create an order" ON public.orders;
+CREATE POLICY "Anyone can create an order" ON public.orders
+  FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Admins can update orders" ON public.orders;
+CREATE POLICY "Admins can update orders" ON public.orders
+  FOR UPDATE USING (public.is_admin());
+`;
+                              navigator.clipboard.writeText(sql);
+                              alert('SQL copied to clipboard. Please run it in your Supabase SQL Editor.');
+                            }}
+                            className="text-[10px] uppercase tracking-[0.2em] font-bold text-primary hover:underline"
+                          >
+                            Copy to Clipboard
+                          </button>
+                        </div>
+                        <pre className="p-8 bg-bg border border-line rounded-xl overflow-x-auto font-mono text-xs text-ink leading-relaxed">
+{`-- 1. Add 'extras' column to 'items' table
+ALTER TABLE public.items 
+ADD COLUMN IF NOT EXISTS extras JSONB DEFAULT '[]';
+
+-- 2. Create 'orders' table
+CREATE TABLE IF NOT EXISTS public.orders (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  items JSONB NOT NULL DEFAULT '[]',
+  total_price NUMERIC(10, 2) NOT NULL,
+  user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  status TEXT DEFAULT 'pending',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 3. Enable RLS and Policies
+ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
+-- (See full script in clipboard for policies)`}
+                        </pre>
+                      </div>
+
+                      <div className="p-8 bg-primary/5 border border-primary/10 rounded-xl space-y-4">
+                        <div className="flex items-center gap-3 text-primary">
+                          <Sparkles className="w-5 h-5" />
+                          <span className="text-[10px] uppercase tracking-[0.4em] font-bold">Instructions</span>
+                        </div>
+                        <ol className="space-y-4 text-xs text-ink/70 list-decimal list-inside leading-relaxed">
+                          <li>Go to your <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" className="text-primary underline">Supabase Dashboard</a>.</li>
+                          <li>Select your project.</li>
+                          <li>Click on the <strong>SQL Editor</strong> in the left sidebar.</li>
+                          <li>Click <strong>New Query</strong>.</li>
+                          <li>Paste the SQL script copied from above.</li>
+                          <li>Click <strong>Run</strong>.</li>
+                          <li>Refresh this application to apply the changes.</li>
+                        </ol>
+                      </div>
+                    </div>
                   </div>
                 </div>
               ) : adminSubView === 'subcategories' ? (
