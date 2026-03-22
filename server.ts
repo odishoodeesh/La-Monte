@@ -3,7 +3,7 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
-import multer, { MulterError } from "multer";
+import multer from "multer";
 import { S3Client, PutObjectCommand, ListObjectsV2Command, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { v4 as uuidv4 } from "uuid";
 
@@ -17,7 +17,7 @@ async function startServer() {
   const PORT = 3000;
 
   // S3 Client Setup
-  const s3Config = {
+  const s3Client = new S3Client({
     endpoint: process.env.S3_ENDPOINT,
     region: process.env.S3_REGION,
     credentials: {
@@ -25,30 +25,11 @@ async function startServer() {
       secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || "",
     },
     forcePathStyle: true,
-  };
-
-  if (!s3Config.endpoint || !s3Config.credentials.accessKeyId || !s3Config.credentials.secretAccessKey) {
-    console.warn("WARNING: S3 configuration is incomplete. Media uploads may fail.");
-    console.warn("- S3_ENDPOINT:", s3Config.endpoint ? "SET" : "MISSING");
-    console.warn("- S3_ACCESS_KEY_ID:", s3Config.credentials.accessKeyId ? "SET" : "MISSING");
-    console.warn("- S3_SECRET_ACCESS_KEY:", s3Config.credentials.secretAccessKey ? "SET" : "MISSING");
-  }
-
-  const s3Client = new S3Client(s3Config);
+  });
 
   const upload = multer({ storage: multer.memoryStorage() });
 
   app.use(express.json({ limit: "50mb" }));
-
-  // Logging middleware
-  app.use((req, res, next) => {
-    const start = Date.now();
-    res.on("finish", () => {
-      const duration = Date.now() - start;
-      console.log(`${new Date().toISOString()} - ${req.method} ${req.url} ${res.statusCode} - ${duration}ms`);
-    });
-    next();
-  });
 
   // API Routes
   app.get("/api/media", async (req, res) => {
@@ -96,18 +77,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/upload", (req, res, next) => {
-    upload.single("image")(req, res, (err) => {
-      if (err instanceof MulterError) {
-        console.error("Multer error:", err);
-        return res.status(400).json({ error: `Upload error: ${err.message}` });
-      } else if (err) {
-        console.error("Unknown upload error:", err);
-        return res.status(500).json({ error: `Unknown upload error: ${err.message}` });
-      }
-      next();
-    });
-  }, async (req, res) => {
+  app.post("/api/upload", upload.single("image"), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ error: "No file uploaded" });
@@ -176,12 +146,6 @@ async function startServer() {
     }
   });
 
-  // 404 handler for API routes
-  app.use("/api/*", (req, res) => {
-    console.warn(`404 - API Route Not Found: ${req.method} ${req.originalUrl}`);
-    res.status(404).json({ error: `API route not found: ${req.method} ${req.originalUrl}` });
-  });
-
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
@@ -197,38 +161,9 @@ async function startServer() {
     });
   }
 
-  // Error handling middleware
-  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-    console.error("Global error handler caught an error:");
-    console.error(`- Method: ${req.method}`);
-    console.error(`- URL: ${req.url}`);
-    console.error(`- Error:`, err);
-
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-
-    // Ensure we always return JSON for API routes
-    if (req.path.startsWith("/api/")) {
-      return res.status(status).json({
-        error: message,
-        stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
-      });
-    }
-
-    // For non-API routes, if headers already sent, delegate to default express handler
-    if (res.headersSent) {
-      return next(err);
-    }
-
-    res.status(status).json({ error: message });
-  });
-
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }
 
-startServer().catch(err => {
-  console.error("CRITICAL: Failed to start server:", err);
-  process.exit(1);
-});
+startServer();
