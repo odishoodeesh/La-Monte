@@ -31,7 +31,10 @@ import {
   Layers,
   Grid,
   BarChart3,
-  ShoppingBag
+  ShoppingBag,
+  PlusSquare,
+  CheckCircle2,
+  XCircle
 } from "lucide-react";
 import { GoogleGenAI } from "@google/genai";
 
@@ -44,7 +47,8 @@ interface MenuItem {
   subcategory: string;
   subcategory_id?: string;
   image_url: string;
-  item_extras?: { id?: string; name: string; price: number }[];
+  is_available?: boolean;
+  sub_items?: { id?: string; name: string; price: number; is_available?: boolean }[];
 }
 
 interface CartItem {
@@ -83,7 +87,7 @@ export default function App() {
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('DRINKS');
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
-  const [adminSubView, setAdminSubView] = useState<'dashboard' | 'menu' | 'categories' | 'subcategories'>('dashboard');
+  const [adminSubView, setAdminSubView] = useState<'dashboard' | 'menu' | 'categories' | 'subcategories' | 'sub_items'>('dashboard');
   const [editingItem, setEditingItem] = useState<Partial<MenuItem> | null>(null);
   const [editingCategory, setEditingCategory] = useState<Partial<Category> | null>(null);
   const [editingSubcategory, setEditingSubcategory] = useState<Partial<Subcategory> | null>(null);
@@ -107,8 +111,8 @@ export default function App() {
   const addToCart = () => {
     if (!selectedItem) return;
 
-    const extras = selectedItem.item_extras 
-      ? Array.from(selectedExtras).map(idx => selectedItem.item_extras![idx])
+    const extras = selectedItem.sub_items 
+      ? Array.from(selectedExtras).map(idx => selectedItem.sub_items![idx])
       : [];
     
     const totalPrice = selectedItem.price + extras.reduce((acc, e) => acc + e.price, 0);
@@ -266,7 +270,7 @@ export default function App() {
         .from('items')
         .select(`
           *,
-          item_extras (*),
+          sub_items (*),
           subcategories (
             id,
             name,
@@ -283,12 +287,19 @@ export default function App() {
         .order('name', { ascending: true });
 
       if (data) {
-        const flattenedData = data.map((item: any) => ({
-          ...item,
-          category: item.subcategories?.categories?.name || 'Uncategorized',
-          subcategory: item.subcategories?.name || 'General',
-          subcategory_id: item.subcategory_id
-        }));
+        console.log('Fetched menu items:', data.length);
+        const flattenedData = data.map((item: any) => {
+          // Handle potential array or object responses from Supabase for relationships
+          const subcat = Array.isArray(item.subcategories) ? item.subcategories[0] : item.subcategories;
+          const cat = subcat ? (Array.isArray(subcat.categories) ? subcat.categories[0] : subcat.categories) : null;
+          
+          return {
+            ...item,
+            category: cat?.name || 'Uncategorized',
+            subcategory: subcat?.name || 'General',
+            subcategory_id: item.subcategory_id
+          };
+        });
         setMenuItems(flattenedData);
       }
       if (error) throw error;
@@ -420,7 +431,7 @@ export default function App() {
     const subcategory = item.subcategory || 'General';
     
     // Filter for public view
-    if (view === 'menu' && !item.is_available) return acc;
+    if (view === 'menu' && item.is_available === false) return acc;
 
     if (!acc[category]) acc[category] = {};
     if (!acc[category][subcategory]) acc[category][subcategory] = [];
@@ -570,11 +581,12 @@ export default function App() {
   const handleSaveItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem || !editingItem.subcategory_id) {
-      alert('Please select a subcategory');
+      setAuthError('Please select a subcategory');
       return;
     }
 
     setAuthLoading(true);
+    setAuthError(null);
     try {
       const itemToSave = {
         name: editingItem.name,
@@ -587,6 +599,7 @@ export default function App() {
 
       let itemId = editingItem.id;
 
+      console.log('Saving item:', itemToSave);
       if (editingItem.id) {
         const { error } = await supabase
           .from('items')
@@ -603,21 +616,26 @@ export default function App() {
         itemId = data.id;
       }
 
-      // Handle Extras (Sub-items)
+      // Handle Sub-items
       if (itemId) {
-        // Delete existing extras first
-        await supabase.from('item_extras').delete().eq('item_id', itemId);
+        // Delete existing sub-items first
+        await supabase.from('sub_items').delete().eq('item_id', itemId);
         
-        // Insert new extras
-        if (editingItem.item_extras && editingItem.item_extras.length > 0) {
-          const extrasToSave = editingItem.item_extras.map(extra => ({
-            item_id: itemId,
-            name: extra.name,
-            price: extra.price,
-            is_available: true
-          }));
-          const { error: extrasError } = await supabase.from('item_extras').insert(extrasToSave);
-          if (extrasError) throw extrasError;
+        // Insert new sub-items
+        if (editingItem.sub_items && editingItem.sub_items.length > 0) {
+          const extrasToSave = editingItem.sub_items
+            .filter(extra => extra.name.trim() !== '')
+            .map(extra => ({
+              item_id: itemId,
+              name: extra.name,
+              price: extra.price,
+              is_available: extra.is_available !== false
+            }));
+          
+          if (extrasToSave.length > 0) {
+            const { error: extrasError } = await supabase.from('sub_items').insert(extrasToSave);
+            if (extrasError) throw extrasError;
+          }
         }
       }
 
@@ -625,7 +643,8 @@ export default function App() {
       setEditingItem(null);
       fetchMenu();
     } catch (error: any) {
-      alert(error.message);
+      console.error('Error saving item:', error);
+      setAuthError(error.message);
     } finally {
       setAuthLoading(false);
     }
@@ -651,14 +670,37 @@ export default function App() {
       return;
     }
 
+    // Check for user-provided API key for high-quality generation
+    const aistudio = (window as any).aistudio;
+    if (aistudio) {
+      try {
+        const hasKey = await aistudio.hasSelectedApiKey();
+        if (!hasKey) {
+          await aistudio.openSelectKey();
+          // We proceed assuming the user handled the dialog
+        }
+      } catch (e) {
+        console.warn('AI Studio key selection not available:', e);
+      }
+    }
+
     setIsGenerating(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      // Use the user's selected key if available, otherwise fallback to platform key
+      const apiKey = (process.env as any).API_KEY || process.env.GEMINI_API_KEY;
+      const ai = new GoogleGenAI({ apiKey });
+      
       const prompt = `Professional food photography of ${editingItem.name}. ${editingItem.description || ''}. High-end restaurant style, minimalist background, warm lighting, 4k resolution. Please include a small, elegant, and subtle "Lamonte" restaurant logo in one of the corners of the image.`;
       
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-image',
+        model: 'gemini-3.1-flash-image-preview',
         contents: [{ parts: [{ text: prompt }] }],
+        config: {
+          imageConfig: {
+            aspectRatio: "1:1",
+            imageSize: "1K"
+          }
+        }
       });
 
       const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
@@ -678,7 +720,12 @@ export default function App() {
       }
     } catch (error: any) {
       console.error('Generation error:', error);
-      alert('Failed to generate image. Please try again.');
+      if (error.message?.includes('Requested entity was not found')) {
+        alert('API Key error. Please try selecting your key again.');
+        if (aistudio) await aistudio.openSelectKey();
+      } else {
+        alert('Failed to generate image. Please try again.');
+      }
     } finally {
       setIsGenerating(false);
     }
@@ -904,6 +951,7 @@ export default function App() {
                       { title: "Menu Items", desc: "Curate your offerings.", icon: <Coffee className="w-5 h-5" />, view: 'menu' },
                       { title: "Categories", desc: "Define the structure.", icon: <Layers className="w-5 h-5" />, view: 'categories' },
                       { title: "Subcategories", desc: "Nested organization.", icon: <Grid className="w-5 h-5" />, view: 'subcategories' },
+                      { title: "Sub-items", desc: "Manage extras.", icon: <PlusSquare className="w-5 h-5" />, view: 'sub_items' },
                       { title: "Media Library", desc: "Visual assets.", icon: <ImageIcon className="w-5 h-5" />, action: () => setIsMediaLibraryOpen(true) },
                       { title: "Analytics", desc: "Performance insights.", icon: <BarChart3 className="w-5 h-5" />, view: 'dashboard' }
                     ].map((item, i) => (
@@ -1054,6 +1102,76 @@ export default function App() {
                     </table>
                   </div>
                 </div>
+              ) : adminSubView === 'sub_items' ? (
+                <div className="space-y-12">
+                  <div className="flex items-center justify-between">
+                    <button 
+                      onClick={() => setAdminSubView('dashboard')}
+                      className="flex items-center gap-3 text-gray-400 hover:text-ink transition-colors group"
+                    >
+                      <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                      <span className="text-[10px] uppercase tracking-[0.4em] font-bold">Return</span>
+                    </button>
+                    <p className="text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400 italic">
+                      Manage sub-items within their parent creations.
+                    </p>
+                  </div>
+
+                  <div className="bg-white border border-line overflow-hidden">
+                    <table className="w-full text-left">
+                      <thead className="bg-bg/50 border-b border-line">
+                        <tr>
+                          <th className="px-8 py-6 text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400">Sub-item</th>
+                          <th className="px-8 py-6 text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400">Parent Creation</th>
+                          <th className="px-8 py-6 text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400">Valuation</th>
+                          <th className="px-8 py-6 text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400">Status</th>
+                          <th className="px-8 py-6 text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-line">
+                        {menuItems.flatMap(item => (item.sub_items || []).map((sub, idx) => (
+                          <tr key={`${item.id}-${idx}`} className="hover:bg-bg/30 transition-colors group">
+                            <td className="px-8 py-6 font-display italic text-xl text-ink">{sub.name}</td>
+                            <td className="px-8 py-6">
+                              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary">
+                                {item.name}
+                              </span>
+                            </td>
+                            <td className="px-8 py-6 font-display italic text-lg text-ink">
+                              {sub.price.toLocaleString()} <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-300 ml-1">IQD</span>
+                            </td>
+                            <td className="px-8 py-6">
+                              <span className={`text-[10px] font-bold uppercase tracking-[0.2em] ${sub.is_available !== false ? 'text-primary' : 'text-gray-300'}`}>
+                                {sub.is_available !== false ? 'Available' : 'Unavailable'}
+                              </span>
+                            </td>
+                            <td className="px-8 py-6 text-right">
+                              <div className="flex items-center justify-end gap-6">
+                                <button
+                                  onClick={() => {
+                                    setEditingItem(item);
+                                    setIsModalOpen(true);
+                                  }}
+                                  className="text-gray-300 hover:text-primary transition-colors"
+                                  title="Edit in Parent"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )))}
+                        {menuItems.every(item => !item.sub_items || item.sub_items.length === 0) && (
+                          <tr>
+                            <td colSpan={4} className="px-8 py-12 text-center text-gray-400 italic font-light">
+                              No sub-items have been defined yet.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               ) : (
                 <div className="space-y-12">
                   <div className="flex items-center justify-between">
@@ -1066,7 +1184,16 @@ export default function App() {
                     </button>
                     <button
                       onClick={() => {
-                        setEditingItem({ name: '', description: '', price: 0, category: '', subcategory: '', subcategory_id: '', image_url: '' });
+                        setEditingItem({ 
+                          name: '', 
+                          description: '', 
+                          price: 0, 
+                          category: '', 
+                          subcategory: '', 
+                          subcategory_id: '', 
+                          image_url: '',
+                          sub_items: [] 
+                        });
                         setIsModalOpen(true);
                       }}
                       className="px-8 py-4 bg-ink text-white text-[10px] uppercase tracking-[0.4em] font-bold hover:bg-primary transition-all flex items-center gap-3"
@@ -1498,57 +1625,74 @@ export default function App() {
 
                       <div className="space-y-6">
                         <div className="flex items-center justify-between">
-                          <label className="text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400 ml-1">Extras / Add-ons</label>
+                          <label className="text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400 ml-1">Sub-items / Extras</label>
                           <button
                             type="button"
                             onClick={() => {
-                              const currentExtras = editingItem?.item_extras || [];
+                              const currentExtras = editingItem?.sub_items || [];
                               setEditingItem(prev => ({
                                 ...prev,
-                                item_extras: [...currentExtras, { name: '', price: 0 }]
+                                sub_items: [...currentExtras, { name: '', price: 0, is_available: true }]
                               }));
                             }}
                             className="text-[10px] uppercase tracking-[0.2em] font-bold text-primary hover:text-ink transition-colors flex items-center gap-2"
                           >
                             <Plus className="w-3 h-3" />
-                            Add Extra
+                            Add Sub-item
                           </button>
                         </div>
                         
                         <div className="space-y-4">
-                          {(editingItem?.item_extras || []).map((extra, index) => (
+                          {(editingItem?.sub_items || []).map((extra, index) => (
                             <div key={index} className="flex items-end gap-4 group">
                               <div className="flex-1 space-y-2">
                                 <input
                                   type="text"
                                   value={extra.name}
                                   onChange={(e) => {
-                                    const newExtras = [...(editingItem?.item_extras || [])];
-                                    newExtras[index].name = e.target.value;
-                                    setEditingItem(prev => ({ ...prev, item_extras: newExtras }));
+                                    const newExtras = (editingItem?.sub_items || []).map((extra, i) => 
+                                      i === index ? { ...extra, name: e.target.value } : extra
+                                    );
+                                    setEditingItem(prev => ({ ...prev, sub_items: newExtras }));
                                   }}
                                   className="w-full px-0 py-2 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-display italic text-lg text-ink placeholder:text-gray-200"
-                                  placeholder="Extra name (e.g. Caramel syrup)"
+                                  placeholder="Name (e.g. Extra Shot)"
                                 />
                               </div>
-                              <div className="w-32 space-y-2">
+                              <div className="w-24 space-y-2">
                                 <input
                                   type="number"
                                   value={extra.price}
                                   onChange={(e) => {
-                                    const newExtras = [...(editingItem?.item_extras || [])];
-                                    newExtras[index].price = parseInt(e.target.value) || 0;
-                                    setEditingItem(prev => ({ ...prev, item_extras: newExtras }));
+                                    const newExtras = (editingItem?.sub_items || []).map((extra, i) => 
+                                      i === index ? { ...extra, price: parseInt(e.target.value) || 0 } : extra
+                                    );
+                                    setEditingItem(prev => ({ ...prev, sub_items: newExtras }));
                                   }}
                                   className="w-full px-0 py-2 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-display italic text-lg text-ink placeholder:text-gray-200"
                                   placeholder="Price"
                                 />
                               </div>
+                              <div className="flex items-center gap-2 pb-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const newExtras = (editingItem?.sub_items || []).map((extra, i) => 
+                                      i === index ? { ...extra, is_available: !extra.is_available } : extra
+                                    );
+                                    setEditingItem(prev => ({ ...prev, sub_items: newExtras }));
+                                  }}
+                                  className={`p-2 rounded-lg transition-all ${extra.is_available !== false ? 'text-primary bg-primary/10' : 'text-gray-300 bg-gray-100'}`}
+                                  title={extra.is_available !== false ? 'Available' : 'Unavailable'}
+                                >
+                                  {extra.is_available !== false ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+                                </button>
+                              </div>
                               <button
                                 type="button"
                                 onClick={() => {
-                                  const newExtras = (editingItem?.item_extras || []).filter((_, i) => i !== index);
-                                  setEditingItem(prev => ({ ...prev, item_extras: newExtras }));
+                                  const newExtras = (editingItem?.sub_items || []).filter((_, i) => i !== index);
+                                  setEditingItem(prev => ({ ...prev, sub_items: newExtras }));
                                 }}
                                 className="p-2 text-gray-300 hover:text-red-500 transition-colors"
                               >
@@ -1556,8 +1700,8 @@ export default function App() {
                               </button>
                             </div>
                           ))}
-                          {(editingItem?.item_extras || []).length === 0 && (
-                            <p className="text-[10px] text-gray-300 italic tracking-widest">No extras defined for this item.</p>
+                          {(editingItem?.sub_items || []).length === 0 && (
+                            <p className="text-[10px] text-gray-300 italic tracking-widest">No sub-items defined.</p>
                           )}
                         </div>
                       </div>
@@ -1690,10 +1834,18 @@ export default function App() {
                   />
                   <span className="text-[8px] uppercase tracking-[0.6em] font-bold text-gray-400 ml-2">Lounge & Restaurant</span>
                 </div>
-                <button 
-                  onClick={() => setIsCartOpen(true)}
-                  className="relative p-3 text-ink hover:text-primary transition-all duration-500 group bg-bg rounded-full border border-line hover:border-primary/20"
-                >
+                <div className="flex items-center gap-4">
+                  <button 
+                    onClick={() => fetchMenu()}
+                    className="p-3 text-gray-300 hover:text-ink transition-all duration-500 group bg-bg rounded-full border border-line hover:border-primary/20"
+                    title="Refresh Menu"
+                  >
+                    <RefreshCw className={`w-5 h-5 group-hover:rotate-180 transition-transform duration-700 ${menuLoading ? 'animate-spin text-primary' : ''}`} />
+                  </button>
+                  <button 
+                    onClick={() => setIsCartOpen(true)}
+                    className="relative p-3 text-ink hover:text-primary transition-all duration-500 group bg-bg rounded-full border border-line hover:border-primary/20"
+                  >
                   <ShoppingBag className="w-6 h-6 group-hover:scale-110 transition-transform duration-500" />
                   <AnimatePresence>
                     {cart.length > 0 && (
@@ -1709,8 +1861,9 @@ export default function App() {
                   </AnimatePresence>
                 </button>
               </div>
-              
-              <div className="flex gap-10 px-8 overflow-x-auto no-scrollbar w-full max-w-3xl justify-center">
+            </div>
+            
+            <div className="flex gap-10 px-8 overflow-x-auto no-scrollbar w-full max-w-3xl justify-center">
                 {[
                   { id: 'DRINKS', label: 'Beverages' },
                   { id: 'SHISHA', label: 'Shisha' },
@@ -1948,30 +2101,33 @@ export default function App() {
                 </div>
 
                 <div className="space-y-8">
-                  {selectedItem.item_extras && selectedItem.item_extras.length > 0 && (
+                  {selectedItem.sub_items && selectedItem.sub_items.some(e => e.is_available !== false) && (
                     <div className="space-y-4">
                       <label className="text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400">Enhancements</label>
                       <div className="space-y-3">
-                        {selectedItem.item_extras.map((extra, idx) => (
-                          <div 
-                            key={idx} 
-                            onClick={() => {
-                              const newSelected = new Set(selectedExtras);
-                              if (newSelected.has(idx)) newSelected.delete(idx);
-                              else newSelected.add(idx);
-                              setSelectedExtras(newSelected);
-                            }}
-                            className="flex items-center justify-between group cursor-pointer"
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className={`w-4 h-4 border border-line rounded flex items-center justify-center transition-colors ${selectedExtras.has(idx) ? 'bg-primary border-primary' : 'group-hover:border-primary'}`}>
-                                <Plus className={`w-2 h-2 text-white transition-opacity ${selectedExtras.has(idx) ? 'opacity-100' : 'opacity-0'}`} />
+                        {selectedItem.sub_items.map((extra, idx) => {
+                          if (extra.is_available === false) return null;
+                          return (
+                            <div 
+                              key={idx} 
+                              onClick={() => {
+                                const newSelected = new Set(selectedExtras);
+                                if (newSelected.has(idx)) newSelected.delete(idx);
+                                else newSelected.add(idx);
+                                setSelectedExtras(newSelected);
+                              }}
+                              className="flex items-center justify-between group cursor-pointer"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className={`w-4 h-4 border border-line rounded flex items-center justify-center transition-colors ${selectedExtras.has(idx) ? 'bg-primary border-primary' : 'group-hover:border-primary'}`}>
+                                  <Plus className={`w-2 h-2 text-white transition-opacity ${selectedExtras.has(idx) ? 'opacity-100' : 'opacity-0'}`} />
+                                </div>
+                                <span className={`text-sm font-display italic transition-colors ${selectedExtras.has(idx) ? 'text-primary' : 'text-ink'}`}>{extra.name}</span>
                               </div>
-                              <span className={`text-sm font-display italic transition-colors ${selectedExtras.has(idx) ? 'text-primary' : 'text-ink'}`}>{extra.name}</span>
+                              <span className="text-[10px] font-bold text-gray-400">+{extra.price.toLocaleString()} IQD</span>
                             </div>
-                            <span className="text-[10px] font-bold text-gray-400">+{extra.price.toLocaleString()} IQD</span>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -1979,7 +2135,7 @@ export default function App() {
                   <div className="flex flex-col gap-4">
                     <div className="flex items-baseline gap-2">
                       <span className="text-4xl font-light text-ink">
-                        {(selectedItem.price + Array.from(selectedExtras).reduce((acc, idx) => acc + (selectedItem.item_extras?.[idx]?.price || 0), 0)).toLocaleString()}
+                        {(selectedItem.price + Array.from(selectedExtras).reduce((acc, idx) => acc + (selectedItem.sub_items?.[idx]?.price || 0), 0)).toLocaleString()}
                       </span>
                       <span className="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-300">IQD</span>
                     </div>

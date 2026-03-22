@@ -3,7 +3,7 @@
 -- ==========================================
 DROP TABLE IF EXISTS public.order_items CASCADE;
 DROP TABLE IF EXISTS public.orders CASCADE;
-DROP TABLE IF EXISTS public.item_extras CASCADE;
+DROP TABLE IF EXISTS public.sub_items CASCADE;
 DROP TABLE IF EXISTS public.items CASCADE;
 DROP TABLE IF EXISTS public.subcategories CASCADE;
 DROP TABLE IF EXISTS public.categories CASCADE;
@@ -64,8 +64,8 @@ CREATE TABLE public.items (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- ITEM_EXTRAS: The "sub-item" table for extra items (e.g., Extra Shot, Oat Milk)
-CREATE TABLE public.item_extras (
+-- SUB_ITEMS: The "sub-item" table for extra items (e.g., Extra Shot, Oat Milk)
+CREATE TABLE public.sub_items (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   item_id UUID REFERENCES public.items(id) ON DELETE CASCADE NOT NULL,
   name TEXT NOT NULL,
@@ -93,7 +93,7 @@ ALTER TABLE public.menus ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.subcategories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.items ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.item_extras ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sub_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 
 -- Admin Check Function (SECURITY DEFINER to bypass RLS for checks)
@@ -130,9 +130,9 @@ CREATE POLICY "Allow admin full access for subcategories" ON public.subcategorie
 CREATE POLICY "Allow public read access for items" ON public.items FOR SELECT USING (true);
 CREATE POLICY "Allow admin full access for items" ON public.items FOR ALL USING (public.is_admin());
 
--- Item Extras Policies (The "sub-item" table)
-CREATE POLICY "Allow public read access for item_extras" ON public.item_extras FOR SELECT USING (true);
-CREATE POLICY "Allow admin full access for item_extras" ON public.item_extras FOR ALL USING (public.is_admin());
+-- Sub-items Policies
+CREATE POLICY "Allow public read access for sub_items" ON public.sub_items FOR SELECT USING (true);
+CREATE POLICY "Allow admin full access for sub_items" ON public.sub_items FOR ALL USING (public.is_admin());
 
 -- Orders Policies
 CREATE POLICY "Users can view their own orders" ON public.orders FOR SELECT USING (auth.uid() = user_id);
@@ -211,7 +211,7 @@ BEGIN
 
     -- Sample Sub-items (Extras)
     IF espresso_id IS NOT NULL THEN
-      INSERT INTO public.item_extras (item_id, name, price)
+      INSERT INTO public.sub_items (item_id, name, price)
       VALUES 
         (espresso_id, 'Extra Shot', 1000),
         (espresso_id, 'Oat Milk', 1500)
