@@ -450,6 +450,12 @@ export default function App() {
     ...allCategories.filter(cat => !mainCategories.some(m => m.toLowerCase() === cat.toLowerCase()))
   ];
 
+  // Helper to get the correct key from groupedMenu regardless of case
+  const getCategoryData = (categoryName: string) => {
+    const actualKey = allCategories.find(k => k.toLowerCase() === categoryName.toLowerCase());
+    return actualKey ? groupedMenu[actualKey] : null;
+  };
+
   const handleGoogleSignIn = async () => {
     setAuthLoading(true);
     setAuthError(null);
@@ -1907,9 +1913,10 @@ export default function App() {
               ) : (
                 <div className="space-y-40">
                   {displayCategories.map(categoryName => {
-                    const actualKey = allCategories.find(k => k.toLowerCase() === categoryName.toLowerCase()) || categoryName;
-                    const subcategories = groupedMenu[actualKey];
+                    const subcategories = getCategoryData(categoryName);
                     if (!subcategories) return null;
+                    
+                    const actualKey = allCategories.find(k => k.toLowerCase() === categoryName.toLowerCase()) || categoryName;
                     
                     return (
                       <div key={actualKey} id={`category-${actualKey}`} className="space-y-16 scroll-mt-48">
