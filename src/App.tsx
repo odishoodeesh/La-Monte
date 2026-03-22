@@ -276,11 +276,7 @@ export default function App() {
             name,
             categories (
               id,
-              name,
-              menus (
-                id,
-                name
-              )
+              name
             )
           )
         `)
