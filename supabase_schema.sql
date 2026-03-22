@@ -1,6 +1,9 @@
 -- ==========================================
 -- 1. CLEANUP (Fresh Start)
 -- ==========================================
+DROP TABLE IF EXISTS public.order_items CASCADE;
+DROP TABLE IF EXISTS public.orders CASCADE;
+DROP TABLE IF EXISTS public.item_extras CASCADE;
 DROP TABLE IF EXISTS public.items CASCADE;
 DROP TABLE IF EXISTS public.subcategories CASCADE;
 DROP TABLE IF EXISTS public.categories CASCADE;
@@ -56,9 +59,28 @@ CREATE TABLE public.items (
   description TEXT,
   price NUMERIC(10, 2) NOT NULL,
   image_url TEXT,
-  extras JSONB DEFAULT '[]',
   is_available BOOLEAN DEFAULT true,
   display_order INTEGER DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- ITEM_EXTRAS: The "sub-item" table for extra items (e.g., Extra Shot, Oat Milk)
+CREATE TABLE public.item_extras (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  item_id UUID REFERENCES public.items(id) ON DELETE CASCADE NOT NULL,
+  name TEXT NOT NULL,
+  price NUMERIC(10, 2) DEFAULT 0,
+  is_available BOOLEAN DEFAULT true,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- ORDERS: Customer orders
+CREATE TABLE public.orders (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  items JSONB NOT NULL, -- Storing snapshot of items for history
+  total_price NUMERIC(10, 2) NOT NULL,
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'preparing', 'ready', 'completed', 'cancelled')),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -71,8 +93,10 @@ ALTER TABLE public.menus ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.subcategories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.item_extras ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 
--- Admin Check Function
+-- Admin Check Function (SECURITY DEFINER to bypass RLS for checks)
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN AS $$
 BEGIN
@@ -106,6 +130,15 @@ CREATE POLICY "Allow admin full access for subcategories" ON public.subcategorie
 CREATE POLICY "Allow public read access for items" ON public.items FOR SELECT USING (true);
 CREATE POLICY "Allow admin full access for items" ON public.items FOR ALL USING (public.is_admin());
 
+-- Item Extras Policies (The "sub-item" table)
+CREATE POLICY "Allow public read access for item_extras" ON public.item_extras FOR SELECT USING (true);
+CREATE POLICY "Allow admin full access for item_extras" ON public.item_extras FOR ALL USING (public.is_admin());
+
+-- Orders Policies
+CREATE POLICY "Users can view their own orders" ON public.orders FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Anyone can create an order" ON public.orders FOR INSERT WITH CHECK (true);
+CREATE POLICY "Admins can view and manage all orders" ON public.orders FOR ALL USING (public.is_admin());
+
 -- ==========================================
 -- 4. TRIGGERS (Automation)
 -- ==========================================
@@ -136,7 +169,7 @@ CREATE TRIGGER on_auth_user_created
 -- Create Main Menu
 INSERT INTO public.menus (name) VALUES ('Main Menu') ON CONFLICT (name) DO NOTHING;
 
--- Get Menu ID
+-- Get Menu ID and Seed Data
 DO $$
 DECLARE
     main_menu_id UUID;
@@ -144,21 +177,7 @@ DECLARE
     shisha_id UUID;
     food_id UUID;
     hot_drinks_id UUID;
-    cold_drinks_id UUID;
-    cold_brew_id UUID;
-    frappe_id UUID;
-    mojito_id UUID;
-    smoothies_id UUID;
-    milkshake_id UUID;
-    redbull_id UUID;
-    refreshing_id UUID;
-    fresh_juice_id UUID;
-    detox_id UUID;
-    tea_id UUID;
-    water_id UUID;
-    lamonte_id UUID;
-    sweets_id UUID;
-    toasts_id UUID;
+    espresso_id UUID;
 BEGIN
     SELECT id INTO main_menu_id FROM public.menus WHERE name = 'Main Menu';
 
@@ -183,127 +202,19 @@ BEGIN
     VALUES (drinks_id, 'HOT DRINKS', 1) 
     ON CONFLICT (category_id, name) DO UPDATE SET display_order = EXCLUDED.display_order
     RETURNING id INTO hot_drinks_id;
-    
-    INSERT INTO public.subcategories (category_id, name, display_order) 
-    VALUES (drinks_id, 'COLD DRINKS', 2) 
-    ON CONFLICT (category_id, name) DO UPDATE SET display_order = EXCLUDED.display_order
-    RETURNING id INTO cold_drinks_id;
 
-    INSERT INTO public.subcategories (category_id, name, display_order) 
-    VALUES (drinks_id, 'COLD BREW', 3) 
-    ON CONFLICT (category_id, name) DO UPDATE SET display_order = EXCLUDED.display_order
-    RETURNING id INTO cold_brew_id;
+    -- Sample Item
+    INSERT INTO public.items (subcategory_id, name, price, description)
+    VALUES (hot_drinks_id, 'Espresso', 3000, 'Pure concentrated coffee essence.')
+    ON CONFLICT DO NOTHING
+    RETURNING id INTO espresso_id;
 
-    INSERT INTO public.subcategories (category_id, name, display_order) 
-    VALUES (drinks_id, 'COFFEE FRAPPE', 4) 
-    ON CONFLICT (category_id, name) DO UPDATE SET display_order = EXCLUDED.display_order
-    RETURNING id INTO frappe_id;
-
-    INSERT INTO public.subcategories (category_id, name, display_order) 
-    VALUES (drinks_id, 'MOJITO', 5) 
-    ON CONFLICT (category_id, name) DO UPDATE SET display_order = EXCLUDED.display_order
-    RETURNING id INTO mojito_id;
-
-    INSERT INTO public.subcategories (category_id, name, display_order) 
-    VALUES (drinks_id, 'SMOTHIES', 6) 
-    ON CONFLICT (category_id, name) DO UPDATE SET display_order = EXCLUDED.display_order
-    RETURNING id INTO smoothies_id;
-
-    INSERT INTO public.subcategories (category_id, name, display_order) 
-    VALUES (drinks_id, 'MILKSHAKE', 7) 
-    ON CONFLICT (category_id, name) DO UPDATE SET display_order = EXCLUDED.display_order
-    RETURNING id INTO milkshake_id;
-
-    INSERT INTO public.subcategories (category_id, name, display_order) 
-    VALUES (drinks_id, 'RED BULL', 8) 
-    ON CONFLICT (category_id, name) DO UPDATE SET display_order = EXCLUDED.display_order
-    RETURNING id INTO redbull_id;
-
-    INSERT INTO public.subcategories (category_id, name, display_order) 
-    VALUES (drinks_id, 'REFRESHING DRINKS', 9) 
-    ON CONFLICT (category_id, name) DO UPDATE SET display_order = EXCLUDED.display_order
-    RETURNING id INTO refreshing_id;
-
-    INSERT INTO public.subcategories (category_id, name, display_order) 
-    VALUES (drinks_id, 'FRESH JUICE', 10) 
-    ON CONFLICT (category_id, name) DO UPDATE SET display_order = EXCLUDED.display_order
-    RETURNING id INTO fresh_juice_id;
-
-    INSERT INTO public.subcategories (category_id, name, display_order) 
-    VALUES (drinks_id, 'DETOX', 11) 
-    ON CONFLICT (category_id, name) DO UPDATE SET display_order = EXCLUDED.display_order
-    RETURNING id INTO detox_id;
-
-    INSERT INTO public.subcategories (category_id, name, display_order) 
-    VALUES (drinks_id, 'TEA', 12) 
-    ON CONFLICT (category_id, name) DO UPDATE SET display_order = EXCLUDED.display_order
-    RETURNING id INTO tea_id;
-
-    INSERT INTO public.subcategories (category_id, name, display_order) 
-    VALUES (drinks_id, 'WATER', 13) 
-    ON CONFLICT (category_id, name) DO UPDATE SET display_order = EXCLUDED.display_order
-    RETURNING id INTO water_id;
-
-    -- Subcategories for SHISHA
-    INSERT INTO public.subcategories (category_id, name, display_order) 
-    VALUES (shisha_id, 'SHISHA', 1) 
-    ON CONFLICT (category_id, name) DO UPDATE SET display_order = EXCLUDED.display_order
-    RETURNING id INTO lamonte_id;
-
-    -- Subcategories for FOOD
-    INSERT INTO public.subcategories (category_id, name, display_order) 
-    VALUES (food_id, 'SWEETS AND CAKE', 1) 
-    ON CONFLICT (category_id, name) DO UPDATE SET display_order = EXCLUDED.display_order
-    RETURNING id INTO sweets_id;
-    
-    INSERT INTO public.subcategories (category_id, name, display_order) 
-    VALUES (food_id, 'TOASTS', 2) 
-    ON CONFLICT (category_id, name) DO UPDATE SET display_order = EXCLUDED.display_order
-    RETURNING id INTO toasts_id;
-
-    -- Items: HOT DRINKS (Only insert if not exists to avoid duplicates)
-    INSERT INTO public.items (subcategory_id, name, price)
-    SELECT hot_drinks_id, 'Double Espresso', 4000 WHERE NOT EXISTS (SELECT 1 FROM public.items WHERE name = 'Double Espresso' AND subcategory_id = hot_drinks_id);
-    INSERT INTO public.items (subcategory_id, name, price)
-    SELECT hot_drinks_id, 'Espresso', 3000 WHERE NOT EXISTS (SELECT 1 FROM public.items WHERE name = 'Espresso' AND subcategory_id = hot_drinks_id);
-    -- ... (and so on for other items if needed, but usually we just want the schema and basic data)
+    -- Sample Sub-items (Extras)
+    IF espresso_id IS NOT NULL THEN
+      INSERT INTO public.item_extras (item_id, name, price)
+      VALUES 
+        (espresso_id, 'Extra Shot', 1000),
+        (espresso_id, 'Oat Milk', 1500)
+      ON CONFLICT DO NOTHING;
+    END IF;
 END $$;
-
--- ==========================================
--- 6. STORAGE (Advanced Configuration)
--- ==========================================
-
--- Ensure the bucket exists
-INSERT INTO storage.buckets (id, name, public)
-VALUES ('uploads', 'uploads', true)
-ON CONFLICT (id) DO UPDATE SET public = true;
-
--- Enable RLS on storage tables for granular control
-ALTER TABLE storage.buckets ENABLE ROW LEVEL SECURITY;
-ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
-
--- BUCKET POLICIES (storage.buckets)
--- 1. Allow public to view the 'uploads' bucket metadata
-CREATE POLICY "Public Bucket View"
-ON storage.buckets FOR SELECT
-USING ( id = 'uploads' );
-
--- 2. Allow admins full control over all buckets
-CREATE POLICY "Admin Bucket Control"
-ON storage.buckets FOR ALL
-TO authenticated
-USING ( public.is_admin() )
-WITH CHECK ( public.is_admin() );
-
--- OBJECT POLICIES (storage.objects)
--- 1. Allow public to view images in 'uploads'
-CREATE POLICY "Public Object View"
-ON storage.objects FOR SELECT
-USING ( bucket_id = 'uploads' );
-
--- 2. Allow admins full control over images in 'uploads'
-CREATE POLICY "Admin Object Control"
-ON storage.objects FOR ALL
-TO authenticated
-USING ( bucket_id = 'uploads' AND public.is_admin() )
-WITH CHECK ( bucket_id = 'uploads' AND public.is_admin() );

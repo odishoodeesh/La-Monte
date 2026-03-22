@@ -44,7 +44,7 @@ interface MenuItem {
   subcategory: string;
   subcategory_id?: string;
   image_url: string;
-  extras?: { name: string; price: number }[];
+  item_extras?: { id?: string; name: string; price: number }[];
 }
 
 interface CartItem {
@@ -107,8 +107,8 @@ export default function App() {
   const addToCart = () => {
     if (!selectedItem) return;
 
-    const extras = selectedItem.extras 
-      ? Array.from(selectedExtras).map(idx => selectedItem.extras![idx])
+    const extras = selectedItem.item_extras 
+      ? Array.from(selectedExtras).map(idx => selectedItem.item_extras![idx])
       : [];
     
     const totalPrice = selectedItem.price + extras.reduce((acc, e) => acc + e.price, 0);
@@ -213,18 +213,40 @@ export default function App() {
       setShowIntro(false);
     }, 1000);
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        console.error('Auth session error:', error.message);
+        // If the refresh token is invalid, sign out to clear local storage
+        if (error.message.includes('Refresh Token Not Found') || error.message.includes('Invalid Refresh Token')) {
+          supabase.auth.signOut().then(() => {
+            setSession(null);
+            setLoading(false);
+          });
+          return;
+        }
+      }
       setSession(session);
       if (session) setView('admin');
+      setLoading(false);
+    }).catch(err => {
+      console.error('Unexpected auth error:', err);
       setLoading(false);
     });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session) setView('admin');
-      else if (view === 'admin') setView('menu');
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('Auth event:', event, !!session);
+      
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        setSession(session);
+        setView('admin');
+      } else if (event === 'SIGNED_OUT') {
+        setSession(null);
+        setView('menu');
+      } else if (event === 'USER_UPDATED') {
+        setSession(session);
+      }
     });
 
     fetchMenu();
@@ -244,6 +266,7 @@ export default function App() {
         .from('items')
         .select(`
           *,
+          item_extras (*),
           subcategories (
             id,
             name,
@@ -559,9 +582,10 @@ export default function App() {
         price: editingItem.price,
         image_url: editingItem.image_url || '',
         subcategory_id: editingItem.subcategory_id,
-        is_available: true,
-        extras: editingItem.extras || []
+        is_available: true
       };
+
+      let itemId = editingItem.id;
 
       if (editingItem.id) {
         const { error } = await supabase
@@ -570,11 +594,33 @@ export default function App() {
           .eq('id', editingItem.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('items')
-          .insert([itemToSave]);
+          .insert([itemToSave])
+          .select()
+          .single();
         if (error) throw error;
+        itemId = data.id;
       }
+
+      // Handle Extras (Sub-items)
+      if (itemId) {
+        // Delete existing extras first
+        await supabase.from('item_extras').delete().eq('item_id', itemId);
+        
+        // Insert new extras
+        if (editingItem.item_extras && editingItem.item_extras.length > 0) {
+          const extrasToSave = editingItem.item_extras.map(extra => ({
+            item_id: itemId,
+            name: extra.name,
+            price: extra.price,
+            is_available: true
+          }));
+          const { error: extrasError } = await supabase.from('item_extras').insert(extrasToSave);
+          if (extrasError) throw extrasError;
+        }
+      }
+
       setIsModalOpen(false);
       setEditingItem(null);
       fetchMenu();
@@ -1456,10 +1502,10 @@ export default function App() {
                           <button
                             type="button"
                             onClick={() => {
-                              const currentExtras = editingItem?.extras || [];
+                              const currentExtras = editingItem?.item_extras || [];
                               setEditingItem(prev => ({
                                 ...prev,
-                                extras: [...currentExtras, { name: '', price: 0 }]
+                                item_extras: [...currentExtras, { name: '', price: 0 }]
                               }));
                             }}
                             className="text-[10px] uppercase tracking-[0.2em] font-bold text-primary hover:text-ink transition-colors flex items-center gap-2"
@@ -1470,16 +1516,16 @@ export default function App() {
                         </div>
                         
                         <div className="space-y-4">
-                          {(editingItem?.extras || []).map((extra, index) => (
+                          {(editingItem?.item_extras || []).map((extra, index) => (
                             <div key={index} className="flex items-end gap-4 group">
                               <div className="flex-1 space-y-2">
                                 <input
                                   type="text"
                                   value={extra.name}
                                   onChange={(e) => {
-                                    const newExtras = [...(editingItem?.extras || [])];
+                                    const newExtras = [...(editingItem?.item_extras || [])];
                                     newExtras[index].name = e.target.value;
-                                    setEditingItem(prev => ({ ...prev, extras: newExtras }));
+                                    setEditingItem(prev => ({ ...prev, item_extras: newExtras }));
                                   }}
                                   className="w-full px-0 py-2 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-display italic text-lg text-ink placeholder:text-gray-200"
                                   placeholder="Extra name (e.g. Caramel syrup)"
@@ -1490,9 +1536,9 @@ export default function App() {
                                   type="number"
                                   value={extra.price}
                                   onChange={(e) => {
-                                    const newExtras = [...(editingItem?.extras || [])];
+                                    const newExtras = [...(editingItem?.item_extras || [])];
                                     newExtras[index].price = parseInt(e.target.value) || 0;
-                                    setEditingItem(prev => ({ ...prev, extras: newExtras }));
+                                    setEditingItem(prev => ({ ...prev, item_extras: newExtras }));
                                   }}
                                   className="w-full px-0 py-2 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-display italic text-lg text-ink placeholder:text-gray-200"
                                   placeholder="Price"
@@ -1501,8 +1547,8 @@ export default function App() {
                               <button
                                 type="button"
                                 onClick={() => {
-                                  const newExtras = (editingItem?.extras || []).filter((_, i) => i !== index);
-                                  setEditingItem(prev => ({ ...prev, extras: newExtras }));
+                                  const newExtras = (editingItem?.item_extras || []).filter((_, i) => i !== index);
+                                  setEditingItem(prev => ({ ...prev, item_extras: newExtras }));
                                 }}
                                 className="p-2 text-gray-300 hover:text-red-500 transition-colors"
                               >
@@ -1510,7 +1556,7 @@ export default function App() {
                               </button>
                             </div>
                           ))}
-                          {(editingItem?.extras || []).length === 0 && (
+                          {(editingItem?.item_extras || []).length === 0 && (
                             <p className="text-[10px] text-gray-300 italic tracking-widest">No extras defined for this item.</p>
                           )}
                         </div>
@@ -1902,11 +1948,11 @@ export default function App() {
                 </div>
 
                 <div className="space-y-8">
-                  {selectedItem.extras && selectedItem.extras.length > 0 && (
+                  {selectedItem.item_extras && selectedItem.item_extras.length > 0 && (
                     <div className="space-y-4">
                       <label className="text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400">Enhancements</label>
                       <div className="space-y-3">
-                        {selectedItem.extras.map((extra, idx) => (
+                        {selectedItem.item_extras.map((extra, idx) => (
                           <div 
                             key={idx} 
                             onClick={() => {
@@ -1933,7 +1979,7 @@ export default function App() {
                   <div className="flex flex-col gap-4">
                     <div className="flex items-baseline gap-2">
                       <span className="text-4xl font-light text-ink">
-                        {(selectedItem.price + Array.from(selectedExtras).reduce((acc, idx) => acc + (selectedItem.extras?.[idx]?.price || 0), 0)).toLocaleString()}
+                        {(selectedItem.price + Array.from(selectedExtras).reduce((acc, idx) => acc + (selectedItem.item_extras?.[idx]?.price || 0), 0)).toLocaleString()}
                       </span>
                       <span className="text-[10px] font-bold uppercase tracking-[0.4em] text-gray-300">IQD</span>
                     </div>
