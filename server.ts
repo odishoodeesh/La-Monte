@@ -38,24 +38,26 @@ async function startServer() {
 
   const upload = multer({ storage: multer.memoryStorage() });
 
-  app.use(express.json({ limit: "50mb" }));
-
-  // Logging middleware
+  // Logging middleware - MOVE TO TOP
   app.use((req, res, next) => {
     const start = Date.now();
+    console.log(`${new Date().toISOString()} - INCOMING: ${req.method} ${req.url}`);
     res.on("finish", () => {
       const duration = Date.now() - start;
-      console.log(`${new Date().toISOString()} - ${req.method} ${req.url} ${res.statusCode} - ${duration}ms`);
+      console.log(`${new Date().toISOString()} - COMPLETED: ${req.method} ${req.url} ${res.statusCode} - ${duration}ms`);
     });
     next();
   });
 
+  app.use(express.json({ limit: "50mb" }));
+  app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+
   // API Routes
-  app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", timestamp: new Date().toISOString() });
+  app.get(["/api/health", "/api/health/"], (req, res) => {
+    res.json({ status: "ok", timestamp: new Date().toISOString(), env: process.env.NODE_ENV });
   });
 
-  app.get("/api/media", async (req, res) => {
+  app.get(["/api/media", "/api/media/"], async (req, res) => {
     try {
       const bucketName = process.env.S3_BUCKET || "uploads";
       const command = new ListObjectsV2Command({
@@ -82,7 +84,7 @@ async function startServer() {
     }
   });
 
-  app.delete("/api/media/:name", async (req, res) => {
+  app.delete(["/api/media/:name", "/api/media/:name/"], async (req, res) => {
     try {
       const { name } = req.params;
       const bucketName = process.env.S3_BUCKET || "uploads";
@@ -100,7 +102,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/upload", (req, res, next) => {
+  app.post(["/api/upload", "/api/upload/"], (req, res, next) => {
     upload.single("image")(req, res, (err) => {
       if (err instanceof MulterError) {
         console.error("Multer error:", err);
@@ -156,7 +158,7 @@ async function startServer() {
   });
 
   // Handle base64 uploads (for AI generated images)
-  app.post("/api/upload-base64", async (req, res) => {
+  app.post(["/api/upload-base64", "/api/upload-base64/"], async (req, res) => {
     try {
       const { image, name } = req.body;
       if (!image) {

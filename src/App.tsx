@@ -104,6 +104,35 @@ export default function App() {
   const [mediaError, setMediaError] = useState<string | null>(null);
   const [showHeader, setShowHeader] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
+  const [apiStatus, setApiStatus] = useState<{ health: string; media: string }>({ health: 'checking...', media: 'checking...' });
+
+  const checkApiStatus = async () => {
+    try {
+      const healthRes = await fetch('/api/health');
+      const healthData = await healthRes.json();
+      setApiStatus(prev => ({ ...prev, health: `OK (${healthData.status})` }));
+    } catch (e: any) {
+      setApiStatus(prev => ({ ...prev, health: `ERROR: ${e.message}` }));
+    }
+
+    try {
+      const mediaRes = await fetch('/api/media');
+      if (mediaRes.ok) {
+        setApiStatus(prev => ({ ...prev, media: 'OK' }));
+      } else {
+        const text = await mediaRes.text();
+        setApiStatus(prev => ({ ...prev, media: `ERROR ${mediaRes.status}: ${text.substring(0, 30)}...` }));
+      }
+    } catch (e: any) {
+      setApiStatus(prev => ({ ...prev, media: `ERROR: ${e.message}` }));
+    }
+  };
+
+  useEffect(() => {
+    if (view === 'admin') {
+      checkApiStatus();
+    }
+  }, [view]);
 
   const addToCart = () => {
     if (!selectedItem) return;
@@ -867,16 +896,33 @@ export default function App() {
                         Refining the Lamonte experience through intentional management.
                       </p>
                     </div>
-                    <button 
-                      onClick={() => {
-                        fetchMenu();
-                        fetchCategories();
-                      }}
-                      className="flex items-center gap-3 text-[10px] uppercase tracking-[0.3em] font-bold text-gray-400 hover:text-primary transition-all"
-                    >
-                      <RefreshCw className={`w-4 h-4 ${menuLoading ? 'animate-spin' : ''}`} />
-                      Sync Data
-                    </button>
+                    <div className="flex items-center gap-6">
+                      <div className="flex items-center gap-4">
+                        <div className="flex flex-col items-end">
+                          <span className="text-[8px] uppercase tracking-widest text-gray-400">API Health</span>
+                          <span className={`text-[10px] font-bold ${apiStatus.health.includes('OK') ? 'text-green-500' : 'text-red-500'}`}>
+                            {apiStatus.health}
+                          </span>
+                        </div>
+                        <div className="flex flex-col items-end border-l border-line pl-4">
+                          <span className="text-[8px] uppercase tracking-widest text-gray-400">Media API</span>
+                          <span className={`text-[10px] font-bold ${apiStatus.media.includes('OK') ? 'text-green-500' : 'text-red-500'}`}>
+                            {apiStatus.media}
+                          </span>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => {
+                          checkApiStatus();
+                          fetchMenu();
+                          fetchCategories();
+                        }}
+                        className="flex items-center gap-3 text-[10px] uppercase tracking-[0.3em] font-bold text-gray-400 hover:text-primary transition-all"
+                      >
+                        <RefreshCw className={`w-4 h-4 ${(menuLoading || apiStatus.health === 'checking...') ? 'animate-spin' : ''}`} />
+                        Sync Data
+                      </button>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-px bg-line border border-line overflow-hidden rounded-sm">
