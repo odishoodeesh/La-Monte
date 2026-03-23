@@ -309,9 +309,17 @@ export default function App() {
     try {
       console.log('Fetching media from server API');
       const response = await fetch('/api/media');
+      
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await response.text();
+        console.error('Non-JSON response received:', text.substring(0, 100));
+        throw new Error(`Server returned non-JSON response (${response.status}). This usually means the API route is not found or the server is misconfigured.`);
+      }
+
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to fetch media');
+        throw new Error(errorData.error || `Failed to fetch media (Status: ${response.status})`);
       }
       
       const data = await response.json();
@@ -976,24 +984,36 @@ export default function App() {
 
                   <div className="bg-white border border-line p-12 space-y-12">
                     <div className="space-y-4">
-                      <h2 className="text-4xl font-display italic text-ink lowercase">Database Synchronization</h2>
+                      <h2 className="text-4xl font-display italic text-ink lowercase">Database & Storage Setup</h2>
                       <p className="text-gray-400 font-light tracking-wide max-w-2xl">
-                        To resolve schema errors like "Could not find the 'extras' column", you must synchronize your Supabase database with the required schema. Copy and run the following SQL in your Supabase SQL Editor.
+                        To ensure media uploads and orders work correctly in your deployed app, you must synchronize your Supabase database and configure your storage bucket.
                       </p>
                     </div>
 
-                    <div className="space-y-8">
+                    <div className="space-y-12">
                       <div className="space-y-4">
                         <div className="flex items-center justify-between">
-                          <label className="text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400 ml-1">SQL Synchronization Script</label>
+                          <label className="text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400 ml-1">Step 1: SQL Synchronization Script</label>
                           <button 
                             onClick={() => {
                               const sql = `
--- 1. Add 'extras' column to 'items' table if it doesn't exist
+-- 1. Create 'uploads' bucket and set it to public
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('uploads', 'uploads', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- 2. Set up storage policies
+DROP POLICY IF EXISTS "Public Read Access" ON storage.objects;
+CREATE POLICY "Public Read Access" ON storage.objects FOR SELECT USING (bucket_id = 'uploads');
+
+DROP POLICY IF EXISTS "Admin Insert Access" ON storage.objects;
+CREATE POLICY "Admin Insert Access" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'uploads');
+
+-- 3. Add 'extras' column to 'items' table if it doesn't exist
 ALTER TABLE public.items 
 ADD COLUMN IF NOT EXISTS extras JSONB DEFAULT '[]';
 
--- 2. Create 'orders' table if it doesn't exist
+-- 4. Create 'orders' table if it doesn't exist
 CREATE TABLE IF NOT EXISTS public.orders (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   items JSONB NOT NULL DEFAULT '[]',
@@ -1003,10 +1023,10 @@ CREATE TABLE IF NOT EXISTS public.orders (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 3. Enable RLS for 'orders'
+-- 5. Enable RLS for 'orders'
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 
--- 4. Policies for 'orders'
+-- 6. Policies for 'orders'
 DROP POLICY IF EXISTS "Users can view own orders" ON public.orders;
 CREATE POLICY "Users can view own orders" ON public.orders
   FOR SELECT USING (auth.uid() = user_id);
@@ -1022,6 +1042,39 @@ CREATE POLICY "Anyone can create an order" ON public.orders
 DROP POLICY IF EXISTS "Admins can update orders" ON public.orders;
 CREATE POLICY "Admins can update orders" ON public.orders
   FOR UPDATE USING (public.is_admin());
+
+-- 7. Seed Data (Americano & Iced Caramel Latte)
+DO $$
+DECLARE
+    drinks_id UUID;
+    hot_drinks_id UUID;
+    cold_drinks_id UUID;
+BEGIN
+    SELECT id INTO drinks_id FROM public.categories WHERE name = 'DRINKS' LIMIT 1;
+    
+    IF drinks_id IS NOT NULL THEN
+        -- Ensure subcategories exist
+        INSERT INTO public.subcategories (category_id, name, display_order) 
+        VALUES (drinks_id, 'HOT DRINKS', 1) 
+        ON CONFLICT (category_id, name) DO UPDATE SET display_order = EXCLUDED.display_order
+        RETURNING id INTO hot_drinks_id;
+
+        INSERT INTO public.subcategories (category_id, name, display_order) 
+        VALUES (drinks_id, 'COLD DRINKS', 2) 
+        ON CONFLICT (category_id, name) DO UPDATE SET display_order = EXCLUDED.display_order
+        RETURNING id INTO cold_drinks_id;
+
+        -- Add Americano
+        INSERT INTO public.items (subcategory_id, name, price, description, image_url)
+        VALUES (hot_drinks_id, 'Americano', 3500, 'Classic black coffee with hot water and espresso.', 'https://images.unsplash.com/photo-1551033406-611cf9a28f67?auto=format&fit=crop&q=80&w=1000')
+        ON CONFLICT (subcategory_id, name) DO UPDATE SET image_url = EXCLUDED.image_url;
+
+        -- Add Iced Caramel Latte
+        INSERT INTO public.items (subcategory_id, name, price, description, image_url)
+        VALUES (cold_drinks_id, 'Iced Caramel Latte', 4500, 'Chilled espresso with milk and rich caramel syrup.', 'https://images.unsplash.com/photo-1461023058943-07fcbe16d735?auto=format&fit=crop&q=80&w=1000')
+        ON CONFLICT (subcategory_id, name) DO UPDATE SET image_url = EXCLUDED.image_url;
+    END IF;
+END $$;
 `;
                               navigator.clipboard.writeText(sql);
                               alert('SQL copied to clipboard. Please run it in your Supabase SQL Editor.');
@@ -1032,40 +1085,56 @@ CREATE POLICY "Admins can update orders" ON public.orders
                           </button>
                         </div>
                         <pre className="p-8 bg-bg border border-line rounded-xl overflow-x-auto font-mono text-xs text-ink leading-relaxed">
-{`-- 1. Add 'extras' column to 'items' table
+{`-- 1. Create 'uploads' bucket
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('uploads', 'uploads', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- 2. Add 'extras' column to 'items'
 ALTER TABLE public.items 
 ADD COLUMN IF NOT EXISTS extras JSONB DEFAULT '[]';
 
--- 2. Create 'orders' table
+-- 3. Create 'orders' table
 CREATE TABLE IF NOT EXISTS public.orders (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   items JSONB NOT NULL DEFAULT '[]',
   total_price NUMERIC(10, 2) NOT NULL,
-  user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   status TEXT DEFAULT 'pending',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 3. Enable RLS and Policies
-ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
--- (See full script in clipboard for policies)`}
+-- (See full script in clipboard for policies and seed data)`}
                         </pre>
                       </div>
 
-                      <div className="p-8 bg-primary/5 border border-primary/10 rounded-xl space-y-4">
-                        <div className="flex items-center gap-3 text-primary">
-                          <Sparkles className="w-5 h-5" />
-                          <span className="text-[10px] uppercase tracking-[0.4em] font-bold">Instructions</span>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="p-8 bg-primary/5 border border-primary/10 rounded-xl space-y-4">
+                          <div className="flex items-center gap-3 text-primary">
+                            <Database className="w-5 h-5" />
+                            <span className="text-[10px] uppercase tracking-[0.4em] font-bold">Supabase SQL Editor</span>
+                          </div>
+                          <ol className="space-y-4 text-xs text-ink/70 list-decimal list-inside leading-relaxed">
+                            <li>Go to your <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" className="text-primary underline">Supabase Dashboard</a>.</li>
+                            <li>Select your project and open the <strong>SQL Editor</strong>.</li>
+                            <li>Paste the SQL script copied from above and click <strong>Run</strong>.</li>
+                          </ol>
                         </div>
-                        <ol className="space-y-4 text-xs text-ink/70 list-decimal list-inside leading-relaxed">
-                          <li>Go to your <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" className="text-primary underline">Supabase Dashboard</a>.</li>
-                          <li>Select your project.</li>
-                          <li>Click on the <strong>SQL Editor</strong> in the left sidebar.</li>
-                          <li>Click <strong>New Query</strong>.</li>
-                          <li>Paste the SQL script copied from above.</li>
-                          <li>Click <strong>Run</strong>.</li>
-                          <li>Refresh this application to apply the changes.</li>
-                        </ol>
+
+                        <div className="p-8 bg-ink/5 border border-ink/10 rounded-xl space-y-4">
+                          <div className="flex items-center gap-3 text-ink">
+                            <Lock className="w-5 h-5" />
+                            <span className="text-[10px] uppercase tracking-[0.4em] font-bold">S3 Storage Secrets</span>
+                          </div>
+                          <p className="text-xs text-ink/70 leading-relaxed">
+                            For media uploads to work, you must set your Supabase S3 credentials in the <strong>Secrets</strong> panel of AI Studio:
+                          </p>
+                          <ul className="space-y-2 text-[10px] font-mono text-ink/60">
+                            <li>S3_ACCESS_KEY_ID</li>
+                            <li>S3_SECRET_ACCESS_KEY</li>
+                            <li>S3_ENDPOINT (e.g., https://[ref].storage.supabase.co/storage/v1/s3)</li>
+                            <li>S3_REGION (e.g., ap-south-1)</li>
+                          </ul>
+                        </div>
                       </div>
                     </div>
                   </div>

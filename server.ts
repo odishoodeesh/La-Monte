@@ -51,6 +51,10 @@ async function startServer() {
   });
 
   // API Routes
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
   app.get("/api/media", async (req, res) => {
     try {
       const bucketName = process.env.S3_BUCKET || "uploads";
@@ -122,17 +126,26 @@ async function startServer() {
         Key: fileName,
         Body: req.file.buffer,
         ContentType: req.file.mimetype,
-        ACL: "public-read",
       });
 
       await s3Client.send(command);
 
       // Construct the public URL
-      // For Supabase, the public URL is usually: {endpoint}/{bucket}/{key}
-      // But the endpoint provided is the S3 one. 
       // Supabase public URL format: https://{project_ref}.supabase.co/storage/v1/object/public/{bucket}/{key}
-      const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://immwdjlbadltxvfaeqfv.supabase.co';
-      const projectRef = supabaseUrl.split("//")[1].split(".")[0];
+      let projectRef = "";
+      const supabaseUrl = process.env.VITE_SUPABASE_URL;
+      const s3Endpoint = process.env.S3_ENDPOINT;
+
+      if (supabaseUrl) {
+        projectRef = supabaseUrl.split("//")[1].split(".")[0];
+      } else if (s3Endpoint) {
+        // Try to extract from S3 endpoint: https://{project_ref}.storage.supabase.co/storage/v1/s3
+        projectRef = s3Endpoint.split("//")[1].split(".")[0];
+      } else {
+        // Fallback to the initial project ref if nothing else is available
+        projectRef = 'immwdjlbadltxvfaeqfv';
+      }
+
       const publicUrl = `https://${projectRef}.supabase.co/storage/v1/object/public/${bucketName}/${fileName}`;
 
       res.json({ url: publicUrl });
@@ -160,13 +173,22 @@ async function startServer() {
         Key: fileName,
         Body: buffer,
         ContentType: "image/png",
-        ACL: "public-read",
       });
 
       await s3Client.send(command);
 
-      const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://immwdjlbadltxvfaeqfv.supabase.co';
-      const projectRef = supabaseUrl.split("//")[1].split(".")[0];
+      let projectRef = "";
+      const supabaseUrl = process.env.VITE_SUPABASE_URL;
+      const s3Endpoint = process.env.S3_ENDPOINT;
+
+      if (supabaseUrl) {
+        projectRef = supabaseUrl.split("//")[1].split(".")[0];
+      } else if (s3Endpoint) {
+        projectRef = s3Endpoint.split("//")[1].split(".")[0];
+      } else {
+        projectRef = 'immwdjlbadltxvfaeqfv';
+      }
+
       const publicUrl = `https://${projectRef}.supabase.co/storage/v1/object/public/${bucketName}/${fileName}`;
 
       res.json({ url: publicUrl });
@@ -177,9 +199,13 @@ async function startServer() {
   });
 
   // 404 handler for API routes
-  app.use("/api/*", (req, res) => {
+  app.all("/api/*", (req, res) => {
     console.warn(`404 - API Route Not Found: ${req.method} ${req.originalUrl}`);
-    res.status(404).json({ error: `API route not found: ${req.method} ${req.originalUrl}` });
+    res.status(404).json({ 
+      error: "API route not found",
+      method: req.method,
+      path: req.originalUrl 
+    });
   });
 
   // Vite middleware for development

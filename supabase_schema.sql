@@ -10,8 +10,32 @@ DROP TABLE IF EXISTS public.categories CASCADE;
 DROP TABLE IF EXISTS public.menus CASCADE;
 DROP TABLE IF EXISTS public.profiles CASCADE;
 
+-- Cleanup storage (optional, be careful with this in production)
+-- DELETE FROM storage.objects WHERE bucket_id = 'uploads';
+-- DELETE FROM storage.buckets WHERE id = 'uploads';
+
 -- ==========================================
--- 2. TABLES (Schema)
+-- 2. STORAGE (Buckets)
+-- ==========================================
+
+-- Create the uploads bucket if it doesn't exist
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('uploads', 'uploads', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Set up access policies for the bucket
+-- Allow public to read objects
+CREATE POLICY "Public Read Access" ON storage.objects FOR SELECT USING (bucket_id = 'uploads');
+
+-- Allow authenticated users (or specifically admins) to upload/delete
+-- Since we use S3 with service keys, these policies might be bypassed by S3,
+-- but they are good for the Supabase client/dashboard.
+CREATE POLICY "Admin Insert Access" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'uploads');
+CREATE POLICY "Admin Update Access" ON storage.objects FOR UPDATE USING (bucket_id = 'uploads');
+CREATE POLICY "Admin Delete Access" ON storage.objects FOR DELETE USING (bucket_id = 'uploads');
+
+-- ==========================================
+-- 3. TABLES (Schema)
 -- ==========================================
 
 -- PROFILES: Stores user roles and metadata
@@ -59,6 +83,7 @@ CREATE TABLE public.items (
   description TEXT,
   price NUMERIC(10, 2) NOT NULL,
   image_url TEXT,
+  extras JSONB DEFAULT '[]'::jsonb,
   is_available BOOLEAN DEFAULT true,
   display_order INTEGER DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -203,18 +228,21 @@ BEGIN
     ON CONFLICT (category_id, name) DO UPDATE SET display_order = EXCLUDED.display_order
     RETURNING id INTO hot_drinks_id;
 
-    -- Sample Item
-    INSERT INTO public.items (subcategory_id, name, price, description)
-    VALUES (hot_drinks_id, 'Espresso', 3000, 'Pure concentrated coffee essence.')
-    ON CONFLICT DO NOTHING
-    RETURNING id INTO espresso_id;
+    INSERT INTO public.subcategories (category_id, name, display_order) 
+    VALUES (drinks_id, 'COLD DRINKS', 2) 
+    ON CONFLICT (category_id, name) DO UPDATE SET display_order = EXCLUDED.display_order
+    RETURNING id INTO espresso_id; -- Reusing variable for cold drinks subcat id
 
-    -- Sample Sub-items (Extras)
-    IF espresso_id IS NOT NULL THEN
-      INSERT INTO public.sub_items (item_id, name, price)
-      VALUES 
-        (espresso_id, 'Extra Shot', 1000),
-        (espresso_id, 'Oat Milk', 1500)
-      ON CONFLICT DO NOTHING;
-    END IF;
+    -- Sample Items
+    INSERT INTO public.items (subcategory_id, name, price, description, image_url)
+    VALUES (hot_drinks_id, 'Espresso', 3000, 'Pure concentrated coffee essence.', 'https://images.unsplash.com/photo-1510591509098-f4fdc6d0ff04?auto=format&fit=crop&q=80&w=1000')
+    ON CONFLICT DO NOTHING;
+
+    INSERT INTO public.items (subcategory_id, name, price, description, image_url)
+    VALUES (hot_drinks_id, 'Americano', 3500, 'Classic black coffee with hot water and espresso.', 'https://images.unsplash.com/photo-1551033406-611cf9a28f67?auto=format&fit=crop&q=80&w=1000')
+    ON CONFLICT DO NOTHING;
+
+    INSERT INTO public.items (subcategory_id, name, price, description, image_url)
+    VALUES (espresso_id, 'Iced Caramel Latte', 4500, 'Chilled espresso with milk and rich caramel syrup.', 'https://images.unsplash.com/photo-1461023058943-07fcbe16d735?auto=format&fit=crop&q=80&w=1000')
+    ON CONFLICT DO NOTHING;
 END $$;
