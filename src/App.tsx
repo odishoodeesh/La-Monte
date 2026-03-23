@@ -109,6 +109,12 @@ export default function App() {
   const checkApiStatus = async () => {
     try {
       const healthRes = await fetch('/api/health');
+      const contentType = healthRes.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await healthRes.text();
+        setApiStatus(prev => ({ ...prev, health: `ERROR (${healthRes.status}): Non-JSON response. Body: ${text.substring(0, 30)}...` }));
+        return;
+      }
       const healthData = await healthRes.json();
       setApiStatus(prev => ({ ...prev, health: `OK (${healthData.status})` }));
     } catch (e: any) {
@@ -117,11 +123,17 @@ export default function App() {
 
     try {
       const mediaRes = await fetch('/api/media');
+      const contentType = mediaRes.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await mediaRes.text();
+        setApiStatus(prev => ({ ...prev, media: `ERROR (${mediaRes.status}): Non-JSON response. Body: ${text.substring(0, 30)}...` }));
+        return;
+      }
       if (mediaRes.ok) {
         setApiStatus(prev => ({ ...prev, media: 'OK' }));
       } else {
-        const text = await mediaRes.text();
-        setApiStatus(prev => ({ ...prev, media: `ERROR ${mediaRes.status}: ${text.substring(0, 30)}...` }));
+        const errorData = await mediaRes.json();
+        setApiStatus(prev => ({ ...prev, media: `ERROR ${mediaRes.status}: ${errorData.error || 'Unknown error'}` }));
       }
     } catch (e: any) {
       setApiStatus(prev => ({ ...prev, media: `ERROR: ${e.message}` }));
@@ -336,14 +348,14 @@ export default function App() {
     setMediaLoading(true);
     setMediaError(null);
     try {
-      console.log('Fetching media from server API');
+      console.log('Fetching media from server API: /api/media');
       const response = await fetch('/api/media');
       
       const contentType = response.headers.get("content-type");
       if (!contentType || !contentType.includes("application/json")) {
         const text = await response.text();
-        console.error('Non-JSON response received:', text.substring(0, 100));
-        throw new Error(`Server returned non-JSON response (${response.status}). This usually means the API route is not found or the server is misconfigured.`);
+        console.error('Non-JSON response received from /api/media:', text.substring(0, 200));
+        throw new Error(`Server returned non-JSON response (${response.status}). Body starts with: ${text.substring(0, 50)}... This usually means the API route is not found or the server is misconfigured.`);
       }
 
       if (!response.ok) {

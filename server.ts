@@ -53,11 +53,17 @@ async function startServer() {
   app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
   // API Routes
-  app.get(["/api/health", "/api/health/"], (req, res) => {
+  // Global API logger and prefix handler
+  app.use("/api", (req, res, next) => {
+    console.log(`[API REQUEST] ${req.method} ${req.originalUrl}`);
+    next();
+  });
+
+  app.get("/api/health", (req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString(), env: process.env.NODE_ENV });
   });
 
-  app.get(["/api/media", "/api/media/"], async (req, res) => {
+  app.get("/api/media", async (req, res) => {
     try {
       const bucketName = process.env.S3_BUCKET || "uploads";
       const command = new ListObjectsV2Command({
@@ -84,7 +90,7 @@ async function startServer() {
     }
   });
 
-  app.delete(["/api/media/:name", "/api/media/:name/"], async (req, res) => {
+  app.delete("/api/media/:name", async (req, res) => {
     try {
       const { name } = req.params;
       const bucketName = process.env.S3_BUCKET || "uploads";
@@ -102,7 +108,7 @@ async function startServer() {
     }
   });
 
-  app.post(["/api/upload", "/api/upload/"], (req, res, next) => {
+  app.post("/api/upload", (req, res, next) => {
     upload.single("image")(req, res, (err) => {
       if (err instanceof MulterError) {
         console.error("Multer error:", err);
@@ -158,7 +164,7 @@ async function startServer() {
   });
 
   // Handle base64 uploads (for AI generated images)
-  app.post(["/api/upload-base64", "/api/upload-base64/"], async (req, res) => {
+  app.post("/api/upload-base64", async (req, res) => {
     try {
       const { image, name } = req.body;
       if (!image) {
@@ -200,9 +206,9 @@ async function startServer() {
     }
   });
 
-  // 404 handler for API routes
-  app.all("/api/*", (req, res) => {
-    console.warn(`404 - API Route Not Found: ${req.method} ${req.originalUrl}`);
+  // 404 handler for API routes - catch all remaining /api requests
+  app.use("/api", (req, res) => {
+    console.warn(`[API 404] ${req.method} ${req.originalUrl}`);
     res.status(404).json({ 
       error: "API route not found",
       method: req.method,
