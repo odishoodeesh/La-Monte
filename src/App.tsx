@@ -45,6 +45,7 @@ interface MenuItem {
   subcategory: string;
   subcategory_id?: string;
   image_url: string;
+  is_available?: boolean;
   extras?: { name: string; price: number }[];
 }
 
@@ -328,7 +329,7 @@ export default function App() {
     const subcategory = item.subcategory || 'General';
     
     // Filter for public view
-    if (view === 'menu' && !item.is_available) return acc;
+    if (view === 'menu' && item.is_available === false) return acc;
 
     if (!acc[category]) acc[category] = {};
     if (!acc[category][subcategory]) acc[category][subcategory] = [];
