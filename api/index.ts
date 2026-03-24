@@ -9,10 +9,10 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+const app = express();
+const PORT = 3000;
 
+async function startServer() {
   // Logging middleware - MOVE TO TOP
   app.use((req, res, next) => {
     const start = Date.now();
@@ -89,12 +89,19 @@ async function startServer() {
     res.status(status).json({ error: message });
   });
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+  // Only listen if not on Vercel
+  if (process.env.VERCEL !== "1") {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  }
 }
 
 startServer().catch(err => {
   console.error("CRITICAL: Failed to start server:", err);
-  process.exit(1);
+  if (process.env.VERCEL !== "1") {
+    process.exit(1);
+  }
 });
+
+export default app;
