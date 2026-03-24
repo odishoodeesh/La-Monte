@@ -72,7 +72,14 @@ export default function App() {
   const [showIntro, setShowIntro] = useState(true);
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [configError, setConfigError] = useState<string | null>(null);
   const [view, setView] = useState<'menu' | 'auth' | 'admin'>('menu');
+
+  useEffect(() => {
+    if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
+      setConfigError('Supabase configuration is missing. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your environment variables.');
+    }
+  }, []);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -98,53 +105,20 @@ export default function App() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [orderConfirmed, setOrderConfirmed] = useState(false);
-  const [mediaFiles, setMediaFiles] = useState<any[]>([]);
-  const [isMediaLibraryOpen, setIsMediaLibraryOpen] = useState(false);
-  const [mediaLoading, setMediaLoading] = useState(false);
-  const [mediaError, setMediaError] = useState<string | null>(null);
-  const [showHeader, setShowHeader] = useState(true);
-  const [lastScrollY, setLastScrollY] = useState(0);
-  const [apiStatus, setApiStatus] = useState<{ health: string; media: string }>({ health: 'checking...', media: 'checking...' });
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{ message: string; onConfirm: () => void } | null>(null);
 
-  const checkApiStatus = async () => {
-    try {
-      const healthRes = await fetch('/api/health');
-      const contentType = healthRes.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        const text = await healthRes.text();
-        setApiStatus(prev => ({ ...prev, health: `ERROR (${healthRes.status}): Non-JSON response. Body: ${text.substring(0, 30)}...` }));
-        return;
-      }
-      const healthData = await healthRes.json();
-      setApiStatus(prev => ({ ...prev, health: `OK (${healthData.status})` }));
-    } catch (e: any) {
-      setApiStatus(prev => ({ ...prev, health: `ERROR: ${e.message}` }));
-    }
-
-    try {
-      const mediaRes = await fetch('/api/media');
-      const contentType = mediaRes.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        const text = await mediaRes.text();
-        setApiStatus(prev => ({ ...prev, media: `ERROR (${mediaRes.status}): Non-JSON response. Body: ${text.substring(0, 30)}...` }));
-        return;
-      }
-      if (mediaRes.ok) {
-        setApiStatus(prev => ({ ...prev, media: 'OK' }));
-      } else {
-        const errorData = await mediaRes.json();
-        setApiStatus(prev => ({ ...prev, media: `ERROR ${mediaRes.status}: ${errorData.error || 'Unknown error'}` }));
-      }
-    } catch (e: any) {
-      setApiStatus(prev => ({ ...prev, media: `ERROR: ${e.message}` }));
-    }
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 5000);
   };
 
-  useEffect(() => {
-    if (view === 'admin') {
-      checkApiStatus();
-    }
-  }, [view]);
+  const showConfirm = (message: string, onConfirm: () => void) => {
+    setConfirmModal({ message, onConfirm });
+  };
+
+  const [showHeader, setShowHeader] = useState(true);
+  const [lastScrollY, setLastScrollY] = useState(0);
 
   const addToCart = () => {
     if (!selectedItem) return;
@@ -156,7 +130,7 @@ export default function App() {
     const totalPrice = selectedItem.price + extras.reduce((acc, e) => acc + e.price, 0);
 
     const newCartItem: CartItem = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: Math.random().toString(36).substring(2, 11),
       menuItem: selectedItem,
       selectedExtras: extras,
       totalPrice,
@@ -222,7 +196,7 @@ export default function App() {
       }, 3000);
     } catch (error: any) {
       console.error('Error submitting order:', error);
-      alert('Failed to submit order. Please try again.');
+      showToast('Failed to submit order. Please try again.', 'error');
     } finally {
       setIsSubmittingOrder(false);
     }
@@ -276,7 +250,6 @@ export default function App() {
 
     fetchMenu();
     fetchCategories();
-    fetchMedia();
 
     return () => {
       clearTimeout(timer);
@@ -316,8 +289,9 @@ export default function App() {
         setMenuItems(flattenedData);
       }
       if (error) throw error;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching menu:', error);
+      showToast('Failed to load menu items. Please check your connection.', 'error');
     } finally {
       setMenuLoading(false);
     }
@@ -339,107 +313,9 @@ export default function App() {
         setSubcategories(allSubcats);
       }
       if (error) throw error;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching categories:', error);
-    }
-  };
-
-  const fetchMedia = async () => {
-    setMediaLoading(true);
-    setMediaError(null);
-    try {
-      console.log('Fetching media from server API: /api/media');
-      const response = await fetch('/api/media');
-      
-      const contentType = response.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        const text = await response.text();
-        console.error('Non-JSON response received from /api/media:', text.substring(0, 200));
-        throw new Error(`Server returned non-JSON response (${response.status}). Body starts with: ${text.substring(0, 50)}... This usually means the API route is not found or the server is misconfigured.`);
-      }
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Failed to fetch media (Status: ${response.status})`);
-      }
-      
-      const data = await response.json();
-      console.log('Media fetched successfully, count:', data?.length);
-      setMediaFiles(data);
-    } catch (error: any) {
-      console.error('Error fetching media:', error.message);
-      setMediaError(error.message);
-    } finally {
-      setMediaLoading(false);
-    }
-  };
-
-  const handleFileUpload = async (e: any) => {
-    const file = e.target?.files?.[0] || e.files?.[0];
-    if (!file) {
-      console.log('No file selected');
-      return null;
-    }
-
-    console.log('Starting upload for:', file.name, 'Size:', file.size);
-    if (file.size > 5 * 1024 * 1024) {
-      alert('File is too large. Max size is 5MB.');
-      return null;
-    }
-    setMediaLoading(true);
-    try {
-      const formData = new FormData();
-      formData.append('image', file);
-
-      console.log('Uploading to server API');
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Upload failed');
-      }
-      
-      const { url } = await response.json();
-      console.log('Upload successful, URL:', url);
-      await fetchMedia();
-      return url;
-    } catch (error: any) {
-      console.error('Upload catch error:', error);
-      alert('Upload failed: ' + error.message);
-      return null;
-    } finally {
-      setMediaLoading(false);
-    }
-  };
-
-  const getPublicUrl = (name: string) => {
-    const { data } = supabase.storage.from('uploads').getPublicUrl(`${name}`);
-    return data.publicUrl;
-  };
-
-  const handleDeleteMedia = async (name: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!confirm('Are you sure you want to delete this image?')) return;
-
-    setMediaLoading(true);
-    try {
-      const response = await fetch(`/api/media/${encodeURIComponent(name)}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Delete failed');
-      }
-
-      fetchMedia();
-    } catch (error: any) {
-      alert(error.message);
-    } finally {
-      setMediaLoading(false);
+      showToast('Failed to load categories. Please check your connection.', 'error');
     }
   };
 
@@ -497,7 +373,7 @@ export default function App() {
       if (authMode === 'signup') {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
-        alert("Check your email for the confirmation link!");
+        showToast("Check your email for the confirmation link!", 'success');
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
@@ -541,22 +417,23 @@ export default function App() {
       setEditingCategory(null);
       fetchCategories();
     } catch (error: any) {
-      alert(error.message);
+      showToast(error.message, 'error');
     } finally {
       setAuthLoading(false);
     }
   };
 
   const handleDeleteCategory = async (id: string) => {
-    if (!confirm('Are you sure? This will delete all subcategories and items in this category.')) return;
-    try {
-      const { error } = await supabase.from('categories').delete().eq('id', id);
-      if (error) throw error;
-      fetchCategories();
-      fetchMenu();
-    } catch (error: any) {
-      alert(error.message);
-    }
+    showConfirm('Are you sure? This will delete all subcategories and items in this category.', async () => {
+      try {
+        const { error } = await supabase.from('categories').delete().eq('id', id);
+        if (error) throw error;
+        fetchCategories();
+        fetchMenu();
+      } catch (error: any) {
+        showToast(error.message, 'error');
+      }
+    });
   };
 
   const handleSaveSubcategory = async (e: React.FormEvent) => {
@@ -581,28 +458,29 @@ export default function App() {
       setEditingSubcategory(null);
       fetchCategories();
     } catch (error: any) {
-      alert(error.message);
+      showToast(error.message, 'error');
     } finally {
       setAuthLoading(false);
     }
   };
 
   const handleDeleteSubcategory = async (id: string) => {
-    if (!confirm('Are you sure? This will delete all items in this subcategory.')) return;
-    try {
-      const { error } = await supabase.from('subcategories').delete().eq('id', id);
-      if (error) throw error;
-      fetchCategories();
-      fetchMenu();
-    } catch (error: any) {
-      alert(error.message);
-    }
+    showConfirm('Are you sure? This will delete all items in this subcategory.', async () => {
+      try {
+        const { error } = await supabase.from('subcategories').delete().eq('id', id);
+        if (error) throw error;
+        fetchCategories();
+        fetchMenu();
+      } catch (error: any) {
+        showToast(error.message, 'error');
+      }
+    });
   };
 
   const handleSaveItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem || !editingItem.subcategory_id) {
-      alert('Please select a subcategory');
+      showToast('Please select a subcategory', 'error');
       return;
     }
 
@@ -646,64 +524,27 @@ export default function App() {
       setEditingItem(null);
       fetchMenu();
     } catch (error: any) {
-      alert(error.message);
+      showToast(error.message, 'error');
     } finally {
       setAuthLoading(false);
     }
   };
 
   const handleDeleteItem = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this item?')) return;
-    try {
-      const { error } = await supabase
-        .from('items')
-        .delete()
-        .eq('id', id);
-      if (error) throw error;
-      fetchMenu();
-    } catch (error: any) {
-      alert(error.message);
-    }
-  };
-
-  const generateImage = async () => {
-    if (!editingItem?.name) {
-      alert('Please enter an item name first');
-      return;
-    }
-
-    setIsGenerating(true);
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const prompt = `Professional food photography of ${editingItem.name}. ${editingItem.description || ''}. High-end restaurant style, minimalist background, warm lighting, 4k resolution. Please include a small, elegant, and subtle "Lamonte" restaurant logo in one of the corners of the image.`;
-      
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-image',
-        contents: [{ parts: [{ text: prompt }] }],
-      });
-
-      const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-      if (imagePart?.inlineData) {
-        const base64Image = `data:image/png;base64,${imagePart.inlineData.data}`;
-        
-        // Upload to server
-        const uploadRes = await fetch('/api/upload-base64', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image: base64Image, name: editingItem.name })
-        });
-
-        if (!uploadRes.ok) throw new Error('Failed to upload generated image');
-        const { url } = await uploadRes.json();
-        setEditingItem(prev => ({ ...prev, image_url: url }));
+    showConfirm('Are you sure you want to delete this item?', async () => {
+      try {
+        const { error } = await supabase
+          .from('items')
+          .delete()
+          .eq('id', id);
+        if (error) throw error;
+        fetchMenu();
+      } catch (error: any) {
+        showToast(error.message, 'error');
       }
-    } catch (error: any) {
-      console.error('Generation error:', error);
-      alert('Failed to generate image. Please try again.');
-    } finally {
-      setIsGenerating(false);
-    }
+    });
   };
+
 
   if (showIntro) {
     return (
@@ -735,6 +576,14 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-bg text-ink font-sans">
+      {configError && (
+        <div className="fixed top-0 left-0 right-0 z-[9999] bg-red-600 text-white p-4 text-center font-bold shadow-2xl">
+          <div className="max-w-4xl mx-auto flex items-center justify-center gap-4">
+            <AlertCircle className="w-6 h-6" />
+            <p>{configError}</p>
+          </div>
+        </div>
+      )}
       <AnimatePresence mode="wait">
         {view === 'auth' ? (
           <motion.div
@@ -909,29 +758,14 @@ export default function App() {
                       </p>
                     </div>
                     <div className="flex items-center gap-6">
-                      <div className="flex items-center gap-4">
-                        <div className="flex flex-col items-end">
-                          <span className="text-[8px] uppercase tracking-widest text-gray-400">API Health</span>
-                          <span className={`text-[10px] font-bold ${apiStatus.health.includes('OK') ? 'text-green-500' : 'text-red-500'}`}>
-                            {apiStatus.health}
-                          </span>
-                        </div>
-                        <div className="flex flex-col items-end border-l border-line pl-4">
-                          <span className="text-[8px] uppercase tracking-widest text-gray-400">Media API</span>
-                          <span className={`text-[10px] font-bold ${apiStatus.media.includes('OK') ? 'text-green-500' : 'text-red-500'}`}>
-                            {apiStatus.media}
-                          </span>
-                        </div>
-                      </div>
                       <button 
                         onClick={() => {
-                          checkApiStatus();
                           fetchMenu();
                           fetchCategories();
                         }}
                         className="flex items-center gap-3 text-[10px] uppercase tracking-[0.3em] font-bold text-gray-400 hover:text-primary transition-all"
                       >
-                        <RefreshCw className={`w-4 h-4 ${(menuLoading || apiStatus.health === 'checking...') ? 'animate-spin' : ''}`} />
+                        <RefreshCw className={`w-4 h-4 ${menuLoading ? 'animate-spin' : ''}`} />
                         Sync Data
                       </button>
                     </div>
@@ -943,16 +777,13 @@ export default function App() {
                       { title: "Categories", desc: "Define the structure.", icon: <Layers className="w-5 h-5" />, view: 'categories' },
                       { title: "Subcategories", desc: "Nested organization.", icon: <Grid className="w-5 h-5" />, view: 'subcategories' },
                       { title: "Database", desc: "Schema synchronization.", icon: <Database className="w-5 h-5" />, view: 'database' },
-                      { title: "Media Library", desc: "Visual assets.", icon: <ImageIcon className="w-5 h-5" />, action: () => setIsMediaLibraryOpen(true) },
                       { title: "Analytics", desc: "Performance insights.", icon: <BarChart3 className="w-5 h-5" />, view: 'dashboard' }
                     ].map((item, i) => (
                       <motion.div
                         key={i}
                         whileHover={{ backgroundColor: "var(--color-bg)" }}
                         onClick={() => {
-                          if ('action' in item) {
-                            item.action();
-                          } else if (item.view !== 'dashboard') {
+                          if (item.view !== 'dashboard') {
                             setAdminSubView(item.view as any);
                           }
                         }}
@@ -1042,9 +873,9 @@ export default function App() {
 
                   <div className="bg-white border border-line p-12 space-y-12">
                     <div className="space-y-4">
-                      <h2 className="text-4xl font-display italic text-ink lowercase">Database & Storage Setup</h2>
+                      <h2 className="text-4xl font-display italic text-ink lowercase">Database Setup</h2>
                       <p className="text-gray-400 font-light tracking-wide max-w-2xl">
-                        To ensure media uploads and orders work correctly in your deployed app, you must synchronize your Supabase database and configure your storage bucket.
+                        To ensure orders work correctly in your deployed app, you must synchronize your Supabase database schema.
                       </p>
                     </div>
 
@@ -1055,23 +886,11 @@ export default function App() {
                           <button 
                             onClick={() => {
                               const sql = `
--- 1. Create 'uploads' bucket and set it to public
-INSERT INTO storage.buckets (id, name, public)
-VALUES ('uploads', 'uploads', true)
-ON CONFLICT (id) DO NOTHING;
-
--- 2. Set up storage policies
-DROP POLICY IF EXISTS "Public Read Access" ON storage.objects;
-CREATE POLICY "Public Read Access" ON storage.objects FOR SELECT USING (bucket_id = 'uploads');
-
-DROP POLICY IF EXISTS "Admin Insert Access" ON storage.objects;
-CREATE POLICY "Admin Insert Access" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'uploads');
-
--- 3. Add 'extras' column to 'items' table if it doesn't exist
+-- 1. Add 'extras' column to 'items' table if it doesn't exist
 ALTER TABLE public.items 
 ADD COLUMN IF NOT EXISTS extras JSONB DEFAULT '[]';
 
--- 4. Create 'orders' table if it doesn't exist
+-- 2. Create 'orders' table if it doesn't exist
 CREATE TABLE IF NOT EXISTS public.orders (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   items JSONB NOT NULL DEFAULT '[]',
@@ -1081,10 +900,10 @@ CREATE TABLE IF NOT EXISTS public.orders (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 5. Enable RLS for 'orders'
+-- 3. Enable RLS for 'orders'
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 
--- 6. Policies for 'orders'
+-- 4. Policies for 'orders'
 DROP POLICY IF EXISTS "Users can view own orders" ON public.orders;
 CREATE POLICY "Users can view own orders" ON public.orders
   FOR SELECT USING (auth.uid() = user_id);
@@ -1101,7 +920,7 @@ DROP POLICY IF EXISTS "Admins can update orders" ON public.orders;
 CREATE POLICY "Admins can update orders" ON public.orders
   FOR UPDATE USING (public.is_admin());
 
--- 7. Seed Data (Americano & Iced Caramel Latte)
+-- 5. Seed Data (Americano & Iced Caramel Latte)
 DO $$
 DECLARE
     drinks_id UUID;
@@ -1135,7 +954,7 @@ BEGIN
 END $$;
 `;
                               navigator.clipboard.writeText(sql);
-                              alert('SQL copied to clipboard. Please run it in your Supabase SQL Editor.');
+                              showToast('SQL copied to clipboard. Please run it in your Supabase SQL Editor.', 'success');
                             }}
                             className="text-[10px] uppercase tracking-[0.2em] font-bold text-primary hover:underline"
                           >
@@ -1143,16 +962,11 @@ END $$;
                           </button>
                         </div>
                         <pre className="p-8 bg-bg border border-line rounded-xl overflow-x-auto font-mono text-xs text-ink leading-relaxed">
-{`-- 1. Create 'uploads' bucket
-INSERT INTO storage.buckets (id, name, public)
-VALUES ('uploads', 'uploads', true)
-ON CONFLICT (id) DO NOTHING;
-
--- 2. Add 'extras' column to 'items'
+{`-- 1. Add 'extras' column to 'items'
 ALTER TABLE public.items 
 ADD COLUMN IF NOT EXISTS extras JSONB DEFAULT '[]';
 
--- 3. Create 'orders' table
+-- 2. Create 'orders' table
 CREATE TABLE IF NOT EXISTS public.orders (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   items JSONB NOT NULL DEFAULT '[]',
@@ -1176,22 +990,6 @@ CREATE TABLE IF NOT EXISTS public.orders (
                             <li>Select your project and open the <strong>SQL Editor</strong>.</li>
                             <li>Paste the SQL script copied from above and click <strong>Run</strong>.</li>
                           </ol>
-                        </div>
-
-                        <div className="p-8 bg-ink/5 border border-ink/10 rounded-xl space-y-4">
-                          <div className="flex items-center gap-3 text-ink">
-                            <Lock className="w-5 h-5" />
-                            <span className="text-[10px] uppercase tracking-[0.4em] font-bold">S3 Storage Secrets</span>
-                          </div>
-                          <p className="text-xs text-ink/70 leading-relaxed">
-                            For media uploads to work, you must set your Supabase S3 credentials in the <strong>Secrets</strong> panel of AI Studio:
-                          </p>
-                          <ul className="space-y-2 text-[10px] font-mono text-ink/60">
-                            <li>S3_ACCESS_KEY_ID</li>
-                            <li>S3_SECRET_ACCESS_KEY</li>
-                            <li>S3_ENDPOINT (e.g., https://[ref].storage.supabase.co/storage/v1/s3)</li>
-                            <li>S3_REGION (e.g., ap-south-1)</li>
-                          </ul>
                         </div>
                       </div>
                     </div>
@@ -1492,105 +1290,6 @@ CREATE TABLE IF NOT EXISTS public.orders (
               )}
             </AnimatePresence>
 
-            {/* Media Library Modal */}
-            <AnimatePresence>
-              {isMediaLibraryOpen && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    onClick={() => setIsMediaLibraryOpen(false)}
-                    className="absolute inset-0 bg-black/80 backdrop-blur-md"
-                  />
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                    className="relative w-full max-w-4xl bg-white rounded-[40px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
-                  >
-                    <div className="p-12 border-b border-line flex items-center justify-between bg-bg/50 backdrop-blur-sm">
-                      <div>
-                        <h2 className="text-4xl font-display italic text-ink lowercase">Media Library</h2>
-                        <p className="text-[10px] uppercase tracking-[0.2em] text-gray-400 mt-2">Curate your visual selection</p>
-                      </div>
-                      <div className="flex items-center gap-6">
-                        <label className="cursor-pointer px-8 py-4 bg-ink text-white text-[10px] uppercase tracking-[0.4em] font-bold hover:bg-primary transition-all flex items-center gap-3">
-                          <Upload className="w-4 h-4" />
-                          Upload
-                          <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} />
-                        </label>
-                        <button onClick={() => setIsMediaLibraryOpen(false)} className="p-2 text-gray-400 hover:text-ink transition-colors">
-                          <X className="w-6 h-6" />
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="flex-1 p-12 overflow-y-auto custom-scrollbar bg-bg">
-                      {mediaLoading ? (
-                        <div className="h-64 flex flex-col items-center justify-center text-gray-300 gap-6">
-                          <div className="w-12 h-px bg-line animate-pulse" />
-                          <p className="text-[10px] uppercase tracking-[0.4em] font-bold">Scanning Archives</p>
-                        </div>
-                      ) : mediaError ? (
-                        <div className="h-64 flex flex-col items-center justify-center text-red-400 gap-6">
-                          <AlertCircle className="w-12 h-12 opacity-50" />
-                          <p className="text-[10px] uppercase tracking-[0.4em] font-bold">{mediaError}</p>
-                          <button 
-                            onClick={fetchMedia}
-                            className="px-8 py-4 bg-ink text-white text-[10px] uppercase tracking-[0.4em] font-bold hover:bg-primary transition-all"
-                          >
-                            Retry
-                          </button>
-                        </div>
-                      ) : mediaFiles.length === 0 ? (
-                        <div className="h-64 flex flex-col items-center justify-center text-gray-300 gap-6">
-                          <ImageIcon className="w-16 h-16 opacity-20" />
-                          <p className="text-[10px] uppercase tracking-[0.4em] font-bold">No visuals found</p>
-                          <button 
-                            onClick={fetchMedia}
-                            className="px-8 py-4 border border-line text-ink text-[10px] uppercase tracking-[0.4em] font-bold hover:border-primary hover:text-primary transition-all"
-                          >
-                            Refresh
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
-                          {mediaFiles.map((file, i) => {
-                            const url = getPublicUrl(file.name);
-                            return (
-                              <motion.div
-                                key={i}
-                                whileHover={{ scale: 1.02 }}
-                                onClick={() => {
-                                  if (editingItem) {
-                                    setEditingItem(prev => ({ ...prev, image_url: url }));
-                                  }
-                                  setIsMediaLibraryOpen(false);
-                                }}
-                                className="aspect-square bg-white border border-line rounded-xl overflow-hidden cursor-pointer group relative"
-                              >
-                                <img src={url} alt={file.name} className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700" referrerPolicy="no-referrer" />
-                                <div className="absolute inset-0 bg-ink/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-4">
-                                  <span className="text-white text-[10px] uppercase tracking-[0.4em] font-bold">Select</span>
-                                  <button
-                                    onClick={(e) => handleDeleteMedia(file.name, e)}
-                                    className="p-3 bg-white/10 hover:bg-red-500/80 rounded-full text-white transition-all backdrop-blur-sm"
-                                    title="Delete Image"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              </motion.div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  </motion.div>
-                </div>
-              )}
-            </AnimatePresence>
 
             {/* Edit Modal */}
             <AnimatePresence>
@@ -1779,44 +1478,9 @@ CREATE TABLE IF NOT EXISTS public.orders (
                                 type="text"
                                 value={editingItem?.image_url || ''}
                                 onChange={(e) => setEditingItem(prev => ({ ...prev, image_url: e.target.value }))}
-                                className="flex-1 px-0 py-3 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-display italic text-lg text-ink placeholder:text-gray-200"
-                                placeholder="Visual URL"
+                                className="w-full px-0 py-3 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-display italic text-lg text-ink placeholder:text-gray-200"
+                                placeholder="Visual URL (External link)"
                               />
-                              <button
-                                type="button"
-                                onClick={() => setIsMediaLibraryOpen(true)}
-                                className="px-6 py-3 border border-line text-ink text-[10px] uppercase tracking-[0.4em] font-bold hover:border-primary hover:text-primary transition-all flex items-center gap-3"
-                              >
-                                <ImageIcon className="w-4 h-4" />
-                                Library
-                              </button>
-                            </div>
-                            <div className="flex gap-4">
-                              <label className="flex-1 flex items-center justify-center gap-3 px-6 py-4 border border-line text-ink text-[10px] uppercase tracking-[0.4em] font-bold hover:border-primary hover:text-primary transition-all cursor-pointer disabled:opacity-50">
-                                {mediaLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                                {mediaLoading ? 'Uploading' : 'Upload'}
-                                <input
-                                  type="file"
-                                  className="hidden"
-                                  accept="image/*"
-                                  disabled={mediaLoading}
-                                  onChange={async (e) => {
-                                    const url = await handleFileUpload(e);
-                                    if (url && editingItem) {
-                                      setEditingItem(prev => ({ ...prev, image_url: url }));
-                                    }
-                                  }}
-                                />
-                              </label>
-                              <button
-                                type="button"
-                                onClick={generateImage}
-                                disabled={isGenerating}
-                                className="flex-1 flex items-center justify-center gap-3 px-6 py-4 bg-ink text-white text-[10px] uppercase tracking-[0.4em] font-bold hover:bg-primary transition-all disabled:opacity-50"
-                              >
-                                {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                                AI Vision
-                              </button>
                             </div>
                           </div>
                           <div className="w-full md:w-48 h-48 bg-white border border-line rounded-2xl overflow-hidden relative group">
@@ -2241,9 +1905,7 @@ CREATE TABLE IF NOT EXISTS public.orders (
                 <div className="flex items-center gap-4">
                   {cart.length > 0 && (
                     <button 
-                      onClick={() => {
-                        if (confirm('Clear all items from selection?')) setCart([]);
-                      }}
+                      onClick={() => showConfirm('Clear all items from selection?', () => setCart([]))}
                       className="p-2 text-gray-400 hover:text-red-500 transition-colors"
                       title="Clear Selection"
                     >
@@ -2379,6 +2041,63 @@ CREATE TABLE IF NOT EXISTS public.orders (
               )}
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {confirmModal && (
+          <div className="fixed inset-0 z-[11000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-bg w-full max-w-sm rounded-2xl p-8 shadow-2xl border border-white/10 space-y-8"
+            >
+              <div className="text-center space-y-4">
+                <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto">
+                  <AlertCircle className="w-8 h-8 text-red-500" />
+                </div>
+                <h3 className="text-xl font-display text-ink italic">Are you sure?</h3>
+                <p className="text-sm text-gray-400 leading-relaxed">
+                  {confirmModal.message}
+                </p>
+              </div>
+              <div className="flex gap-4">
+                <button
+                  onClick={() => setConfirmModal(null)}
+                  className="flex-1 px-6 py-3 rounded-full border border-white/10 text-sm font-medium hover:bg-white/5 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    confirmModal.onConfirm();
+                    setConfirmModal(null);
+                  }}
+                  className="flex-1 px-6 py-3 rounded-full bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors shadow-lg shadow-red-600/20"
+                >
+                  Confirm
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className={`fixed bottom-8 left-1/2 -translate-x-1/2 z-[10000] px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 ${
+              toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-emerald-600 text-white'
+            }`}
+          >
+            {toast.type === 'error' ? <AlertCircle className="w-5 h-5" /> : <RefreshCw className="w-5 h-5" />}
+            <span className="text-sm font-medium">{toast.message}</span>
+            <button onClick={() => setToast(null)} className="ml-2 hover:opacity-70">
+              <X className="w-4 h-4" />
+            </button>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
