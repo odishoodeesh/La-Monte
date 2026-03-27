@@ -25,16 +25,12 @@ import {
   Save, 
   ArrowLeft, 
   RefreshCw, 
-  Upload, 
-  AlertCircle,
   Coffee,
   Layers,
   Grid,
   BarChart3,
-  ShoppingBag,
-  Database
+  ShoppingBag
 } from "lucide-react";
-import { GoogleGenAI } from "@google/genai";
 
 interface MenuItem {
   id: string;
@@ -45,7 +41,6 @@ interface MenuItem {
   subcategory: string;
   subcategory_id?: string;
   image_url: string;
-  is_available?: boolean;
   extras?: { name: string; price: number }[];
 }
 
@@ -73,14 +68,7 @@ export default function App() {
   const [showIntro, setShowIntro] = useState(true);
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [configError, setConfigError] = useState<string | null>(null);
   const [view, setView] = useState<'menu' | 'auth' | 'admin'>('menu');
-
-  useEffect(() => {
-    if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
-      setConfigError('Supabase configuration is missing. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your environment variables.');
-    }
-  }, []);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -92,7 +80,7 @@ export default function App() {
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('DRINKS');
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
-  const [adminSubView, setAdminSubView] = useState<'dashboard' | 'menu' | 'categories' | 'subcategories' | 'database'>('dashboard');
+  const [adminSubView, setAdminSubView] = useState<'dashboard' | 'menu' | 'categories' | 'subcategories'>('dashboard');
   const [editingItem, setEditingItem] = useState<Partial<MenuItem> | null>(null);
   const [editingCategory, setEditingCategory] = useState<Partial<Category> | null>(null);
   const [editingSubcategory, setEditingSubcategory] = useState<Partial<Subcategory> | null>(null);
@@ -106,18 +94,6 @@ export default function App() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [orderConfirmed, setOrderConfirmed] = useState(false);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  const [confirmModal, setConfirmModal] = useState<{ message: string; onConfirm: () => void } | null>(null);
-
-  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 5000);
-  };
-
-  const showConfirm = (message: string, onConfirm: () => void) => {
-    setConfirmModal({ message, onConfirm });
-  };
-
   const [showHeader, setShowHeader] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
 
@@ -131,7 +107,7 @@ export default function App() {
     const totalPrice = selectedItem.price + extras.reduce((acc, e) => acc + e.price, 0);
 
     const newCartItem: CartItem = {
-      id: Math.random().toString(36).substring(2, 11),
+      id: Math.random().toString(36).substr(2, 9),
       menuItem: selectedItem,
       selectedExtras: extras,
       totalPrice,
@@ -182,12 +158,7 @@ export default function App() {
         .from('orders')
         .insert([orderData]);
 
-      if (error) {
-        if (error.message.includes('relation "public.orders" does not exist') || error.message.includes('orders')) {
-          throw new Error('The "orders" table is missing in your database. Please go to Admin Dashboard > Database to synchronize your schema.');
-        }
-        throw error;
-      }
+      if (error) throw error;
 
       setOrderConfirmed(true);
       setCart([]);
@@ -197,7 +168,7 @@ export default function App() {
       }, 3000);
     } catch (error: any) {
       console.error('Error submitting order:', error);
-      showToast('Failed to submit order. Please try again.', 'error');
+      alert('Failed to submit order. Please try again.');
     } finally {
       setIsSubmittingOrder(false);
     }
@@ -290,9 +261,8 @@ export default function App() {
         setMenuItems(flattenedData);
       }
       if (error) throw error;
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error fetching menu:', error);
-      showToast('Failed to load menu items. Please check your connection.', 'error');
     } finally {
       setMenuLoading(false);
     }
@@ -314,9 +284,8 @@ export default function App() {
         setSubcategories(allSubcats);
       }
       if (error) throw error;
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error fetching categories:', error);
-      showToast('Failed to load categories. Please check your connection.', 'error');
     }
   };
 
@@ -329,7 +298,7 @@ export default function App() {
     const subcategory = item.subcategory || 'General';
     
     // Filter for public view
-    if (view === 'menu' && item.is_available === false) return acc;
+    if (view === 'menu' && !item.is_available) return acc;
 
     if (!acc[category]) acc[category] = {};
     if (!acc[category][subcategory]) acc[category][subcategory] = [];
@@ -374,7 +343,7 @@ export default function App() {
       if (authMode === 'signup') {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
-        showToast("Check your email for the confirmation link!", 'success');
+        alert("Check your email for the confirmation link!");
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
@@ -418,23 +387,22 @@ export default function App() {
       setEditingCategory(null);
       fetchCategories();
     } catch (error: any) {
-      showToast(error.message, 'error');
+      alert(error.message);
     } finally {
       setAuthLoading(false);
     }
   };
 
   const handleDeleteCategory = async (id: string) => {
-    showConfirm('Are you sure? This will delete all subcategories and items in this category.', async () => {
-      try {
-        const { error } = await supabase.from('categories').delete().eq('id', id);
-        if (error) throw error;
-        fetchCategories();
-        fetchMenu();
-      } catch (error: any) {
-        showToast(error.message, 'error');
-      }
-    });
+    if (!confirm('Are you sure? This will delete all subcategories and items in this category.')) return;
+    try {
+      const { error } = await supabase.from('categories').delete().eq('id', id);
+      if (error) throw error;
+      fetchCategories();
+      fetchMenu();
+    } catch (error: any) {
+      alert(error.message);
+    }
   };
 
   const handleSaveSubcategory = async (e: React.FormEvent) => {
@@ -459,29 +427,28 @@ export default function App() {
       setEditingSubcategory(null);
       fetchCategories();
     } catch (error: any) {
-      showToast(error.message, 'error');
+      alert(error.message);
     } finally {
       setAuthLoading(false);
     }
   };
 
   const handleDeleteSubcategory = async (id: string) => {
-    showConfirm('Are you sure? This will delete all items in this subcategory.', async () => {
-      try {
-        const { error } = await supabase.from('subcategories').delete().eq('id', id);
-        if (error) throw error;
-        fetchCategories();
-        fetchMenu();
-      } catch (error: any) {
-        showToast(error.message, 'error');
-      }
-    });
+    if (!confirm('Are you sure? This will delete all items in this subcategory.')) return;
+    try {
+      const { error } = await supabase.from('subcategories').delete().eq('id', id);
+      if (error) throw error;
+      fetchCategories();
+      fetchMenu();
+    } catch (error: any) {
+      alert(error.message);
+    }
   };
 
   const handleSaveItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem || !editingItem.subcategory_id) {
-      showToast('Please select a subcategory', 'error');
+      alert('Please select a subcategory');
       return;
     }
 
@@ -502,50 +469,36 @@ export default function App() {
           .from('items')
           .update(itemToSave)
           .eq('id', editingItem.id);
-        
-        if (error) {
-          if (error.message.includes('extras')) {
-            throw new Error('The "extras" column is missing in your database. Please go to Admin Dashboard > Database to synchronize your schema.');
-          }
-          throw error;
-        }
+        if (error) throw error;
       } else {
         const { error } = await supabase
           .from('items')
           .insert([itemToSave]);
-        
-        if (error) {
-          if (error.message.includes('extras')) {
-            throw new Error('The "extras" column is missing in your database. Please go to Admin Dashboard > Database to synchronize your schema.');
-          }
-          throw error;
-        }
+        if (error) throw error;
       }
       setIsModalOpen(false);
       setEditingItem(null);
       fetchMenu();
     } catch (error: any) {
-      showToast(error.message, 'error');
+      alert(error.message);
     } finally {
       setAuthLoading(false);
     }
   };
 
   const handleDeleteItem = async (id: string) => {
-    showConfirm('Are you sure you want to delete this item?', async () => {
-      try {
-        const { error } = await supabase
-          .from('items')
-          .delete()
-          .eq('id', id);
-        if (error) throw error;
-        fetchMenu();
-      } catch (error: any) {
-        showToast(error.message, 'error');
-      }
-    });
+    if (!confirm('Are you sure you want to delete this item?')) return;
+    try {
+      const { error } = await supabase
+        .from('items')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      fetchMenu();
+    } catch (error: any) {
+      alert(error.message);
+    }
   };
-
 
   if (showIntro) {
     return (
@@ -577,14 +530,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-bg text-ink font-sans">
-      {configError && (
-        <div className="fixed top-0 left-0 right-0 z-[9999] bg-red-600 text-white p-4 text-center font-bold shadow-2xl">
-          <div className="max-w-4xl mx-auto flex items-center justify-center gap-4">
-            <AlertCircle className="w-6 h-6" />
-            <p>{configError}</p>
-          </div>
-        </div>
-      )}
       <AnimatePresence mode="wait">
         {view === 'auth' ? (
           <motion.div
@@ -758,18 +703,16 @@ export default function App() {
                         Refining the Lamonte experience through intentional management.
                       </p>
                     </div>
-                    <div className="flex items-center gap-6">
-                      <button 
-                        onClick={() => {
-                          fetchMenu();
-                          fetchCategories();
-                        }}
-                        className="flex items-center gap-3 text-[10px] uppercase tracking-[0.3em] font-bold text-gray-400 hover:text-primary transition-all"
-                      >
-                        <RefreshCw className={`w-4 h-4 ${menuLoading ? 'animate-spin' : ''}`} />
-                        Sync Data
-                      </button>
-                    </div>
+                    <button 
+                      onClick={() => {
+                        fetchMenu();
+                        fetchCategories();
+                      }}
+                      className="flex items-center gap-3 text-[10px] uppercase tracking-[0.3em] font-bold text-gray-400 hover:text-primary transition-all"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${menuLoading ? 'animate-spin' : ''}`} />
+                      Sync Data
+                    </button>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-px bg-line border border-line overflow-hidden rounded-sm">
@@ -777,7 +720,6 @@ export default function App() {
                       { title: "Menu Items", desc: "Curate your offerings.", icon: <Coffee className="w-5 h-5" />, view: 'menu' },
                       { title: "Categories", desc: "Define the structure.", icon: <Layers className="w-5 h-5" />, view: 'categories' },
                       { title: "Subcategories", desc: "Nested organization.", icon: <Grid className="w-5 h-5" />, view: 'subcategories' },
-                      { title: "Database", desc: "Schema synchronization.", icon: <Database className="w-5 h-5" />, view: 'database' },
                       { title: "Analytics", desc: "Performance insights.", icon: <BarChart3 className="w-5 h-5" />, view: 'dashboard' }
                     ].map((item, i) => (
                       <motion.div
@@ -858,142 +800,6 @@ export default function App() {
                         ))}
                       </tbody>
                     </table>
-                  </div>
-                </div>
-              ) : adminSubView === 'database' ? (
-                <div className="space-y-12">
-                  <div className="flex items-center justify-between">
-                    <button 
-                      onClick={() => setAdminSubView('dashboard')}
-                      className="flex items-center gap-3 text-gray-400 hover:text-ink transition-colors group"
-                    >
-                      <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-                      <span className="text-[10px] uppercase tracking-[0.4em] font-bold">Return</span>
-                    </button>
-                  </div>
-
-                  <div className="bg-white border border-line p-12 space-y-12">
-                    <div className="space-y-4">
-                      <h2 className="text-4xl font-display italic text-ink lowercase">Database Setup</h2>
-                      <p className="text-gray-400 font-light tracking-wide max-w-2xl">
-                        To ensure orders work correctly in your deployed app, you must synchronize your Supabase database schema.
-                      </p>
-                    </div>
-
-                    <div className="space-y-12">
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <label className="text-[10px] uppercase tracking-[0.4em] font-bold text-gray-400 ml-1">Step 1: SQL Synchronization Script</label>
-                          <button 
-                            onClick={() => {
-                              const sql = `
--- 1. Add 'extras' column to 'items' table if it doesn't exist
-ALTER TABLE public.items 
-ADD COLUMN IF NOT EXISTS extras JSONB DEFAULT '[]';
-
--- 2. Create 'orders' table if it doesn't exist
-CREATE TABLE IF NOT EXISTS public.orders (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  items JSONB NOT NULL DEFAULT '[]',
-  total_price NUMERIC(10, 2) NOT NULL,
-  user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'cancelled')),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- 3. Enable RLS for 'orders'
-ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
-
--- 4. Policies for 'orders'
-DROP POLICY IF EXISTS "Users can view own orders" ON public.orders;
-CREATE POLICY "Users can view own orders" ON public.orders
-  FOR SELECT USING (auth.uid() = user_id);
-
-DROP POLICY IF EXISTS "Admins can view all orders" ON public.orders;
-CREATE POLICY "Admins can view all orders" ON public.orders
-  FOR SELECT USING (public.is_admin());
-
-DROP POLICY IF EXISTS "Anyone can create an order" ON public.orders;
-CREATE POLICY "Anyone can create an order" ON public.orders
-  FOR INSERT WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Admins can update orders" ON public.orders;
-CREATE POLICY "Admins can update orders" ON public.orders
-  FOR UPDATE USING (public.is_admin());
-
--- 5. Seed Data (Americano & Iced Caramel Latte)
-DO $$
-DECLARE
-    drinks_id UUID;
-    hot_drinks_id UUID;
-    cold_drinks_id UUID;
-BEGIN
-    SELECT id INTO drinks_id FROM public.categories WHERE name = 'DRINKS' LIMIT 1;
-    
-    IF drinks_id IS NOT NULL THEN
-        -- Ensure subcategories exist
-        INSERT INTO public.subcategories (category_id, name, display_order) 
-        VALUES (drinks_id, 'HOT DRINKS', 1) 
-        ON CONFLICT (category_id, name) DO UPDATE SET display_order = EXCLUDED.display_order
-        RETURNING id INTO hot_drinks_id;
-
-        INSERT INTO public.subcategories (category_id, name, display_order) 
-        VALUES (drinks_id, 'COLD DRINKS', 2) 
-        ON CONFLICT (category_id, name) DO UPDATE SET display_order = EXCLUDED.display_order
-        RETURNING id INTO cold_drinks_id;
-
-        -- Add Americano
-        INSERT INTO public.items (subcategory_id, name, price, description, image_url)
-        VALUES (hot_drinks_id, 'Americano', 3500, 'Classic black coffee with hot water and espresso.', 'https://images.unsplash.com/photo-1551033406-611cf9a28f67?auto=format&fit=crop&q=80&w=1000')
-        ON CONFLICT (subcategory_id, name) DO UPDATE SET image_url = EXCLUDED.image_url;
-
-        -- Add Iced Caramel Latte
-        INSERT INTO public.items (subcategory_id, name, price, description, image_url)
-        VALUES (cold_drinks_id, 'Iced Caramel Latte', 4500, 'Chilled espresso with milk and rich caramel syrup.', 'https://images.unsplash.com/photo-1461023058943-07fcbe16d735?auto=format&fit=crop&q=80&w=1000')
-        ON CONFLICT (subcategory_id, name) DO UPDATE SET image_url = EXCLUDED.image_url;
-    END IF;
-END $$;
-`;
-                              navigator.clipboard.writeText(sql);
-                              showToast('SQL copied to clipboard. Please run it in your Supabase SQL Editor.', 'success');
-                            }}
-                            className="text-[10px] uppercase tracking-[0.2em] font-bold text-primary hover:underline"
-                          >
-                            Copy to Clipboard
-                          </button>
-                        </div>
-                        <pre className="p-8 bg-bg border border-line rounded-xl overflow-x-auto font-mono text-xs text-ink leading-relaxed">
-{`-- 1. Add 'extras' column to 'items'
-ALTER TABLE public.items 
-ADD COLUMN IF NOT EXISTS extras JSONB DEFAULT '[]';
-
--- 2. Create 'orders' table
-CREATE TABLE IF NOT EXISTS public.orders (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  items JSONB NOT NULL DEFAULT '[]',
-  total_price NUMERIC(10, 2) NOT NULL,
-  status TEXT DEFAULT 'pending',
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- (See full script in clipboard for policies and seed data)`}
-                        </pre>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="p-8 bg-primary/5 border border-primary/10 rounded-xl space-y-4">
-                          <div className="flex items-center gap-3 text-primary">
-                            <Database className="w-5 h-5" />
-                            <span className="text-[10px] uppercase tracking-[0.4em] font-bold">Supabase SQL Editor</span>
-                          </div>
-                          <ol className="space-y-4 text-xs text-ink/70 list-decimal list-inside leading-relaxed">
-                            <li>Go to your <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" className="text-primary underline">Supabase Dashboard</a>.</li>
-                            <li>Select your project and open the <strong>SQL Editor</strong>.</li>
-                            <li>Paste the SQL script copied from above and click <strong>Run</strong>.</li>
-                          </ol>
-                        </div>
-                      </div>
-                    </div>
                   </div>
                 </div>
               ) : adminSubView === 'subcategories' ? (
@@ -1291,7 +1097,6 @@ CREATE TABLE IF NOT EXISTS public.orders (
               )}
             </AnimatePresence>
 
-
             {/* Edit Modal */}
             <AnimatePresence>
               {isModalOpen && (
@@ -1479,8 +1284,8 @@ CREATE TABLE IF NOT EXISTS public.orders (
                                 type="text"
                                 value={editingItem?.image_url || ''}
                                 onChange={(e) => setEditingItem(prev => ({ ...prev, image_url: e.target.value }))}
-                                className="w-full px-0 py-3 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-display italic text-lg text-ink placeholder:text-gray-200"
-                                placeholder="Visual URL (External link)"
+                                className="flex-1 px-0 py-3 bg-transparent border-b border-line focus:border-primary outline-none transition-all font-display italic text-lg text-ink placeholder:text-gray-200"
+                                placeholder="Visual URL"
                               />
                             </div>
                           </div>
@@ -1906,7 +1711,9 @@ CREATE TABLE IF NOT EXISTS public.orders (
                 <div className="flex items-center gap-4">
                   {cart.length > 0 && (
                     <button 
-                      onClick={() => showConfirm('Clear all items from selection?', () => setCart([]))}
+                      onClick={() => {
+                        if (confirm('Clear all items from selection?')) setCart([]);
+                      }}
                       className="p-2 text-gray-400 hover:text-red-500 transition-colors"
                       title="Clear Selection"
                     >
@@ -2042,63 +1849,6 @@ CREATE TABLE IF NOT EXISTS public.orders (
               )}
             </motion.div>
           </div>
-        )}
-      </AnimatePresence>
-      <AnimatePresence>
-        {confirmModal && (
-          <div className="fixed inset-0 z-[11000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-bg w-full max-w-sm rounded-2xl p-8 shadow-2xl border border-white/10 space-y-8"
-            >
-              <div className="text-center space-y-4">
-                <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto">
-                  <AlertCircle className="w-8 h-8 text-red-500" />
-                </div>
-                <h3 className="text-xl font-display text-ink italic">Are you sure?</h3>
-                <p className="text-sm text-gray-400 leading-relaxed">
-                  {confirmModal.message}
-                </p>
-              </div>
-              <div className="flex gap-4">
-                <button
-                  onClick={() => setConfirmModal(null)}
-                  className="flex-1 px-6 py-3 rounded-full border border-white/10 text-sm font-medium hover:bg-white/5 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    confirmModal.onConfirm();
-                    setConfirmModal(null);
-                  }}
-                  className="flex-1 px-6 py-3 rounded-full bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors shadow-lg shadow-red-600/20"
-                >
-                  Confirm
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-      <AnimatePresence>
-        {toast && (
-          <motion.div
-            initial={{ opacity: 0, y: 50 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 50 }}
-            className={`fixed bottom-8 left-1/2 -translate-x-1/2 z-[10000] px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 ${
-              toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-emerald-600 text-white'
-            }`}
-          >
-            {toast.type === 'error' ? <AlertCircle className="w-5 h-5" /> : <RefreshCw className="w-5 h-5" />}
-            <span className="text-sm font-medium">{toast.message}</span>
-            <button onClick={() => setToast(null)} className="ml-2 hover:opacity-70">
-              <X className="w-4 h-4" />
-            </button>
-          </motion.div>
         )}
       </AnimatePresence>
     </div>
