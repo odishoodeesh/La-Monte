@@ -29,7 +29,8 @@ import {
   Layers,
   Grid,
   BarChart3,
-  ShoppingBag
+  ShoppingBag,
+  AlertCircle
 } from "lucide-react";
 
 interface MenuItem {
@@ -96,6 +97,14 @@ export default function App() {
   const [orderConfirmed, setOrderConfirmed] = useState(false);
   const [showHeader, setShowHeader] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
+
+  const isSupabaseConfigured = !!import.meta.env.VITE_SUPABASE_URL && !!import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) {
+      console.error('Supabase configuration is missing. Please check your environment variables.');
+    }
+  }, [isSupabaseConfigured]);
 
   const addToCart = () => {
     if (!selectedItem) return;
@@ -321,15 +330,20 @@ export default function App() {
     setAuthLoading(true);
     setAuthError(null);
     try {
+      console.log('Initiating Google Sign-In...');
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: window.location.origin,
         },
       });
-      if (error) throw error;
+      if (error) {
+        console.error('Google Sign-In Error:', error);
+        throw error;
+      }
     } catch (error: any) {
-      setAuthError(error.message);
+      console.error('Caught Google Sign-In Error:', error);
+      setAuthError(error.message || 'Failed to initiate Google Sign-In');
       setAuthLoading(false);
     }
   };
@@ -340,16 +354,24 @@ export default function App() {
     setAuthError(null);
 
     try {
+      console.log(`Initiating ${authMode}...`);
       if (authMode === 'signup') {
         const { error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
+        if (error) {
+          console.error('Sign-Up Error:', error);
+          throw error;
+        }
         alert("Check your email for the confirmation link!");
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
+        if (error) {
+          console.error('Sign-In Error:', error);
+          throw error;
+        }
       }
     } catch (error: any) {
-      setAuthError(error.message);
+      console.error('Caught Auth Error:', error);
+      setAuthError(error.message || `Failed to ${authMode}`);
     } finally {
       setAuthLoading(false);
     }
@@ -499,6 +521,20 @@ export default function App() {
       alert(error.message);
     }
   };
+
+  if (!isSupabaseConfigured) {
+    return (
+      <div className="min-h-screen bg-bg flex items-center justify-center p-8 text-center">
+        <div className="max-w-md space-y-6">
+          <AlertCircle className="w-16 h-16 text-red-500 mx-auto" />
+          <h1 className="text-3xl font-display italic text-ink">Configuration Missing</h1>
+          <p className="text-xs text-gray-400 leading-relaxed uppercase tracking-widest">
+            Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your Vercel environment variables.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (showIntro) {
     return (

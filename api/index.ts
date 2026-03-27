@@ -1,5 +1,6 @@
 import express from "express";
 import dotenv from "dotenv";
+import path from "path";
 
 dotenv.config();
 
@@ -26,7 +27,12 @@ app.use("/api", (req, res, next) => {
 });
 
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString(), env: process.env.NODE_ENV });
+  res.json({ 
+    status: "ok", 
+    timestamp: new Date().toISOString(), 
+    env: process.env.NODE_ENV,
+    vercel: process.env.VERCEL === "1"
+  });
 });
 
 // 404 handler for API routes
@@ -38,6 +44,34 @@ app.use("/api", (req, res) => {
     path: req.originalUrl 
   });
 });
+
+// Vite middleware / Static serving (ONLY for non-Vercel environments)
+// On Vercel, static files are served via vercel.json rewrites
+if (process.env.VERCEL !== "1") {
+  const setupFrontend = async () => {
+    if (process.env.NODE_ENV !== "production") {
+      try {
+        const { createServer: createViteServer } = await import("vite");
+        const vite = await createViteServer({
+          server: { middlewareMode: true },
+          appType: "spa",
+        });
+        app.use(vite.middlewares);
+        console.log("Vite middleware loaded");
+      } catch (e) {
+        console.error("Failed to load Vite middleware:", e);
+      }
+    } else {
+      const distPath = path.join(process.cwd(), "dist");
+      app.use(express.static(distPath));
+      app.get("*", (req, res) => {
+        res.sendFile(path.join(distPath, "index.html"));
+      });
+      console.log("Serving static files from dist");
+    }
+  };
+  setupFrontend();
+}
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -62,13 +96,5 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 
   res.status(status).json({ error: message });
 });
-
-// Only listen if not on Vercel
-if (process.env.VERCEL !== "1" && process.env.NODE_ENV !== "production") {
-  const PORT = Number(process.env.PORT) || 3000;
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
-}
 
 export default app;

@@ -9,4 +9,9 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error('Supabase credentials missing. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your environment.');
 }
 
-export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '');
+// Use placeholder values if missing to prevent crash during build/init
+// The App.tsx component will show a clear error UI if these are missing
+export const supabase = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co', 
+  supabaseAnonKey || 'placeholder'
+);
